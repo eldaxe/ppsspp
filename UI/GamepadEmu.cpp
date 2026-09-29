@@ -539,7 +539,7 @@ void PSPStick::Draw(UIContext &dc) {
 	__CtrlPeekAnalog(stick_, &dx, &dy);
 	rotateTouchHelper(dx, dy);
 
-	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+	const TouchControlConfig &config = g_Config.GetCurrentTouchControlsConfig(g_display.GetDeviceOrientation());
 
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
@@ -566,7 +566,7 @@ bool PSPStick::Touch(const TouchInput &input) {
 		return retval;
 	}
 	if (input.flags & TouchInputFlags::DOWN) {
-		const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+		const TouchControlConfig &config = g_Config.GetCurrentTouchControlsConfig(g_display.GetDeviceOrientation());
 		float fac = 0.5f * (stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale)-0.5f;
 		if (dragPointerId_ == -1 && bounds_.Expand(bounds_.w*fac, bounds_.h*fac).Contains(input.x, input.y)) {
 			if (g_Config.bAutoCenterTouchAnalog) {
@@ -657,7 +657,7 @@ void PSPCustomStick::Draw(UIContext &dc) {
 	dx = posX_;
 	dy = -posY_;
 
-	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+	const TouchControlConfig &config = g_Config.GetCurrentTouchControlsConfig(g_display.GetDeviceOrientation());
 	const float headScale = config.fRightStickHeadScale;
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
@@ -683,7 +683,7 @@ bool PSPCustomStick::Touch(const TouchInput &input) {
 		return false;
 	}
 	if (input.flags & TouchInputFlags::DOWN) {
-		const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+		const TouchControlConfig &config = g_Config.GetCurrentTouchControlsConfig(g_display.GetDeviceOrientation());
 		float fac = 0.5f * config.fRightStickHeadScale - 0.5f;
 		if (dragPointerId_ == -1 && bounds_.Expand(bounds_.w*fac, bounds_.h*fac).Contains(input.x, input.y)) {
 			if (g_Config.bAutoCenterTouchAnalog) {

@@ -768,6 +768,12 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 			}
 		}
 		break;
+	case VIRTKEY_SWAP_LAYOUT:
+		if (down) {
+			g_Config.SwapTouchControlsLayouts();
+			System_PostUIMessage(UIMessage::RECREATE_VIEWS);
+		}
+		break;
 	case VIRTKEY_OPENCHAT:
 		if (down) {
 			if (g_Config.bEnableNetworkChat && !g_Config.bShowImDebugger) {
@@ -1213,7 +1219,7 @@ void EmuScreen::CreateViews() {
 
 	const DeviceOrientation deviceOrientation = GetDeviceOrientation();
 
-	TouchControlConfig &touch = g_Config.GetTouchControlsConfig(deviceOrientation);
+	TouchControlConfig &touch = g_Config.GetCurrentTouchControlsConfig(deviceOrientation);
 
 	const Bounds &bounds = GetLayoutBounds(*screenManager()->getUIContext());
 
