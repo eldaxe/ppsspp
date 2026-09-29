@@ -16,7 +16,9 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <cstdio>
+#include <cstring>
 #include <sstream>
+#include <bitset>
 
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
@@ -34,7 +36,13 @@
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
 
+#include "Common/File/FileUtil.h"
+#include "Core/Util/PathUtil.h"
+
 #define WRITE(p, ...) p.F(__VA_ARGS__)
+
+// Legacy custom-GLSL export/override support from the old patch.
+#define __FRAGMENT_GLSL_FILE__
 
 static const SamplerDef samplersMono[3] = {
 	{ 0, "tex" },
@@ -184,6 +192,77 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	bool needFragCoord = readFramebufferTex || gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 	bool writeDepth = (gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT) || fsDepthClamp) && !forceDepthWritesOff;
+
+	// Keep the historical Fragment_0x*.glsl IDs stable.
+	// Removed legacy fields stay at their old bit positions as zero.
+	enum LegacyFragmentFlag {
+		_LEGACY_HIGHP_FOG = 0,
+		_LEGACY_FRAGMENT_TEST_CACHE,
+		_LEGACY_TEXTURE_3D,
+		_LEGACY_LMODE,
+		_LEGACY_DO_TEXTURE,
+		_LEGACY_ENABLE_FOG,
+		_LEGACY_ALPHA_TEST,
+		_LEGACY_ALPHA_AGAINST_ZERO,
+		_LEGACY_TEST_FORCE_TO_ZERO,
+		_LEGACY_COLOR_TEST,
+		_LEGACY_COLOR_AGAINST_ZERO,
+		_LEGACY_COLOR_DOUBLE,
+		_LEGACY_TEXTURE_PROJECTION,
+		_LEGACY_TEXTURE_ALPHA,
+		_LEGACY_FLAT_BUG,
+		_LEGACY_FLAT_SHADING,
+		_LEGACY_SHADER_DEPAL,
+		_LEGACY_SMOOTHED_DEPAL,
+		_LEGACY_BGRA_TEXTURE,
+		_LEGACY_COLOR_WRITE_MASK,
+		_LEGACY_SHADER_TEX_CLAMP,
+		_LEGACY_BLUE_TO_ALPHA,
+		_LEGACY_CLEAR_MODE,
+		_LEGACY_DISCARD_STENCIL_WORKAROUND,
+		_LEGACY_READ_FRAMEBUFFER,
+		_LEGACY_READ_FRAMEBUFFER_TEX,
+		_LEGACY_FRAG_COORD,
+		_LEGACY_WRITE_DEPTH,
+	};
+
+	std::bitset<28> legacyFlags;
+	legacyFlags.set(_LEGACY_HIGHP_FOG, highpFog);
+	legacyFlags.set(_LEGACY_FRAGMENT_TEST_CACHE, enableFragmentTestCache);
+	legacyFlags.set(_LEGACY_TEXTURE_3D, texture3D);
+	legacyFlags.set(_LEGACY_LMODE, lmode);
+	legacyFlags.set(_LEGACY_DO_TEXTURE, doTexture);
+	legacyFlags.set(_LEGACY_ENABLE_FOG, enableFog);
+	legacyFlags.set(_LEGACY_ALPHA_TEST, enableAlphaTest);
+	legacyFlags.set(_LEGACY_ALPHA_AGAINST_ZERO, alphaTestAgainstZero);
+	legacyFlags.set(_LEGACY_TEST_FORCE_TO_ZERO, testForceToZero);
+	legacyFlags.set(_LEGACY_COLOR_TEST, enableColorTest);
+	legacyFlags.set(_LEGACY_COLOR_AGAINST_ZERO, colorTestAgainstZero);
+	legacyFlags.set(_LEGACY_COLOR_DOUBLE, false);       // removed
+	legacyFlags.set(_LEGACY_TEXTURE_PROJECTION, doTextureProjection);
+	legacyFlags.set(_LEGACY_TEXTURE_ALPHA, false);      // removed
+	legacyFlags.set(_LEGACY_FLAT_BUG, flatBug);
+	legacyFlags.set(_LEGACY_FLAT_SHADING, doFlatShading);
+	legacyFlags.set(_LEGACY_SHADER_DEPAL, shaderDepalMode != ShaderDepalMode::OFF);
+	legacyFlags.set(_LEGACY_SMOOTHED_DEPAL, false);     // removed
+	legacyFlags.set(_LEGACY_BGRA_TEXTURE, false);       // removed
+	legacyFlags.set(_LEGACY_COLOR_WRITE_MASK, colorWriteMask);
+	legacyFlags.set(_LEGACY_SHADER_TEX_CLAMP, needShaderTexClamp);
+	legacyFlags.set(_LEGACY_BLUE_TO_ALPHA, blueToAlpha);
+	legacyFlags.set(_LEGACY_CLEAR_MODE, isModeClear);
+	legacyFlags.set(_LEGACY_DISCARD_STENCIL_WORKAROUND, useDiscardStencilBugWorkaround);
+	legacyFlags.set(_LEGACY_READ_FRAMEBUFFER, needFramebufferRead);
+	legacyFlags.set(_LEGACY_READ_FRAMEBUFFER_TEX, readFramebufferTex);
+	legacyFlags.set(_LEGACY_FRAG_COORD, needFragCoord);
+	legacyFlags.set(_LEGACY_WRITE_DEPTH, writeDepth);
+	const unsigned long legacyFlagValue = legacyFlags.to_ulong();
+
+#ifdef __FRAGMENT_GLSL_FILE__
+	const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
+	const std::string customGLSLName = StringFromFormat("Fragment_0x%lx.glsl", legacyFlagValue);
+	const Path customGLSLPath = customGLSLDir / customGLSLName;
+#endif
+
 
 	// TODO: We could have a separate mechanism to support more ops using the shader blending mechanism,
 // on hardware that can do proper bit math in fragment shaders.
@@ -415,6 +494,21 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 		if (fsMinmaxDiscard || fsDepthClamp) {
 			WRITE(p, "%s highp vec2 v_zw;\n", compat.varying_fs);
+		}
+
+		// Extra interface used by the legacy custom GLSL/PBR shader files.
+		// Unlike the old patch, declare these before main() so the generated
+		// shader itself remains valid GLSL.
+		if (compat.gles && (legacyFlagValue == 0x32 || legacyFlagValue == 0x2032)) {
+			WRITE(p, "%s %s lowp flat int flag;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_1;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_2;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_3;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_4;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_5;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_6;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_7;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_8;\n", shading, compat.varying_fs);
 		}
 
 		if (!enableFragmentTestCache) {
@@ -1225,6 +1319,31 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	}
 
 	WRITE(p, "}\n");
+
+#ifdef __FRAGMENT_GLSL_FILE__
+	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		Path shaderPath = customGLSLPath;
+		// The old generator could produce 0x2032 because bit 13 (TEXALPHA)
+		// existed then. Modern PPSSPP no longer has that bit, so allow an
+		// existing legacy 0x2032 file to remain usable as an alias.
+		if (legacyFlagValue == 0x32) {
+			Path legacy2032 = customGLSLDir / "Fragment_0x2032.glsl";
+			std::string legacyCode;
+			if (File::ReadTextFileToString(legacy2032, &legacyCode) && !File::Exists(shaderPath))
+				shaderPath = legacy2032;
+		}
+		std::string customCode;
+		if (File::ReadTextFileToString(shaderPath, &customCode)) {
+			if (!customCode.empty() && customCode.size() < 16384) {
+				std::memcpy(buffer, customCode.data(), customCode.size());
+				buffer[customCode.size()] = '\0';
+			}
+		} else {
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, buffer, customGLSLPath);
+		}
+	}
+#endif
 
 	return true;
 }
