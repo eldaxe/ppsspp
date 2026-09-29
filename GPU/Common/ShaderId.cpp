@@ -19,6 +19,23 @@ std::string ShaderID::ToDebugString() const {
 	return StringFromFormat("%08x:%08x", d >> 32, d & 0xFFFFFFFF);
 }
 
+std::string ShaderID::ToHexString() const {
+	return StringFromFormat("%08x_%08x", (uint32_t)(d >> 32), (uint32_t)d);
+}
+
+bool ShaderID::HasMatchingIDComment(std::string_view source) const {
+	const std::string marker = "// %" + ToDebugString();
+	for (size_t pos = source.find(marker); pos != std::string_view::npos; pos = source.find(marker, pos + marker.size())) {
+		const bool atLineStart = pos == 0 || source[pos - 1] == '\n';
+		const size_t end = pos + marker.size();
+		const bool endsID = end == source.size() || source[end] == ' ' || source[end] == '\t' || source[end] == '\r' || source[end] == '\n';
+		if (atLineStart && endsID) {
+			return true;
+		}
+	}
+	return false;
+}
+
 std::string VShaderID::Description(bool includeID) const {
 	char buffer[512];
 	StringWriter desc(buffer, sizeof(buffer));

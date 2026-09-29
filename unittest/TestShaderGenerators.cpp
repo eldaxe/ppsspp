@@ -351,6 +351,29 @@ const ShaderLanguage languages[] = {
 };
 const int numLanguages = ARRAY_SIZE(languages);
 
+static bool TestShaderIDFileIdentity() {
+	FShaderID first;
+	first.FromUint64(0x0006000005000102ULL);
+	if (first.ToHexString() != "00060000_05000102") {
+		printf("Unexpected shader ID filename encoding: %s\n", first.ToHexString().c_str());
+		return false;
+	}
+
+	FShaderID second = first;
+	second.SetBit(FS_BIT_STENCIL_TO_ALPHA);
+	if (first.ToHexString() == second.ToHexString()) {
+		printf("Different modern shader IDs produced the same filename\n");
+		return false;
+	}
+
+	const std::string source = StringFromFormat("#version 300 es\n// %%%s Tex Fog StenToAlpha\n", first.ToDebugString().c_str());
+	if (!first.HasMatchingIDComment(source) || second.HasMatchingIDComment(source)) {
+		printf("Legacy shader header did not match only its exact modern ID\n");
+		return false;
+	}
+	return true;
+}
+
 bool TestVertexShaders() {
 	char *buffer[numLanguages];
 
@@ -512,6 +535,9 @@ bool TestShaderGenerators() {
 #else
 	init_glslang();
 #endif
+	if (!TestShaderIDFileIdentity()) {
+		return false;
+	}
 
 	if (!TestStencilShaders()) {
 		return false;

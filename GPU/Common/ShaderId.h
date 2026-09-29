@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <cstring>
 #include <cstdint>
 
@@ -154,6 +155,8 @@ struct ShaderID {
 	}
 
 	std::string ToDebugString() const;
+	std::string ToHexString() const;
+	bool HasMatchingIDComment(std::string_view source) const;
 	uint64_t d;
 protected:
 	bool Bit(int bit) const {

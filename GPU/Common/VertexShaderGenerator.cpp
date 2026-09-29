@@ -236,8 +236,10 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 
 #ifdef __VERTEXT_GLSL_FILE__
 	const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
-	const std::string customGLSLName = StringFromFormat("Vertex_0x%lx.glsl", legacyFlagValue);
-	const Path customGLSLPath = customGLSLDir / customGLSLName;
+	const std::string modernGLSLName = StringFromFormat("Vertex_%s.glsl", id.ToHexString().c_str());
+	const Path modernGLSLPath = customGLSLDir / modernGLSLName;
+	const std::string legacyGLSLName = StringFromFormat("Vertex_0x%lx.glsl", legacyFlagValue);
+	const Path legacyGLSLPath = customGLSLDir / legacyGLSLName;
 #endif
 
 
@@ -1060,14 +1062,28 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 #ifdef __VERTEXT_GLSL_FILE__
 	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 		std::string customCode;
-		if (File::ReadTextFileToString(customGLSLPath, &customCode)) {
+		bool customShaderFound = File::ReadTextFileToString(modernGLSLPath, &customCode);
+		if (customShaderFound) {
+			DEBUG_LOG(Log::G3D, "Found modern vertex GLSL %s for ID %s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+		}
+		if (!customShaderFound && File::ReadTextFileToString(legacyGLSLPath, &customCode)) {
+			if (!id.HasMatchingIDComment(customCode)) {
+				DEBUG_LOG(Log::G3D, "Ignoring legacy vertex GLSL %s for modern ID %s", legacyGLSLPath.c_str(), id.ToDebugString().c_str());
+				customCode.clear();
+			} else {
+				customShaderFound = true;
+				DEBUG_LOG(Log::G3D, "Using compatible legacy vertex GLSL %s for ID %s", legacyGLSLPath.c_str(), id.ToDebugString().c_str());
+			}
+		}
+		if (customShaderFound) {
 			if (!customCode.empty() && customCode.size() < 16384) {
 				std::memcpy(buffer, customCode.data(), customCode.size());
 				buffer[customCode.size()] = '\0';
 			}
 		} else {
 			File::CreateFullPath(customGLSLDir);
-			File::WriteStringToFile(true, buffer, customGLSLPath);
+			DEBUG_LOG(Log::G3D, "Storing generated vertex GLSL %s for ID %s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+			File::WriteStringToFile(true, buffer, modernGLSLPath);
 		}
 	}
 #endif

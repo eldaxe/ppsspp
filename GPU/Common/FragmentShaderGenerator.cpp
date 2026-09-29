@@ -259,8 +259,10 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 #ifdef __FRAGMENT_GLSL_FILE__
 	const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
-	const std::string customGLSLName = StringFromFormat("Fragment_0x%lx.glsl", legacyFlagValue);
-	const Path customGLSLPath = customGLSLDir / customGLSLName;
+	const std::string modernGLSLName = StringFromFormat("Fragment_%s.glsl", id.ToHexString().c_str());
+	const Path modernGLSLPath = customGLSLDir / modernGLSLName;
+	const std::string legacyGLSLName = StringFromFormat("Fragment_0x%lx.glsl", legacyFlagValue);
+	const Path legacyGLSLPath = customGLSLDir / legacyGLSLName;
 #endif
 
 
@@ -1322,25 +1324,38 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 #ifdef __FRAGMENT_GLSL_FILE__
 	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
-		Path shaderPath = customGLSLPath;
-		// The old generator could produce 0x2032 because bit 13 (TEXALPHA)
-		// existed then. Modern PPSSPP no longer has that bit, so allow an
-		// existing legacy 0x2032 file to remain usable as an alias.
-		if (legacyFlagValue == 0x32) {
-			Path legacy2032 = customGLSLDir / "Fragment_0x2032.glsl";
-			std::string legacyCode;
-			if (File::ReadTextFileToString(legacy2032, &legacyCode) && !File::Exists(shaderPath))
-				shaderPath = legacy2032;
-		}
 		std::string customCode;
-		if (File::ReadTextFileToString(shaderPath, &customCode)) {
+		bool customShaderFound = File::ReadTextFileToString(modernGLSLPath, &customCode);
+		if (customShaderFound) {
+			DEBUG_LOG(Log::G3D, "Found modern fragment GLSL %s for ID %s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+		}
+		auto tryLegacyShader = [&](const Path &path) {
+			if (!File::ReadTextFileToString(path, &customCode))
+				return false;
+			if (!id.HasMatchingIDComment(customCode)) {
+				DEBUG_LOG(Log::G3D, "Ignoring legacy fragment GLSL %s for modern ID %s", path.c_str(), id.ToDebugString().c_str());
+				customCode.clear();
+				return false;
+			}
+			DEBUG_LOG(Log::G3D, "Using compatible legacy fragment GLSL %s for ID %s", path.c_str(), id.ToDebugString().c_str());
+			return true;
+		};
+		if (!customShaderFound) {
+			customShaderFound = tryLegacyShader(legacyGLSLPath);
+			// Older versions also included the removed TEXALPHA bit in this filename.
+			if (!customShaderFound && legacyFlagValue == 0x32) {
+				customShaderFound = tryLegacyShader(customGLSLDir / "Fragment_0x2032.glsl");
+			}
+		}
+		if (customShaderFound) {
 			if (!customCode.empty() && customCode.size() < 16384) {
 				std::memcpy(buffer, customCode.data(), customCode.size());
 				buffer[customCode.size()] = '\0';
 			}
 		} else {
 			File::CreateFullPath(customGLSLDir);
-			File::WriteStringToFile(true, buffer, customGLSLPath);
+			DEBUG_LOG(Log::G3D, "Storing generated fragment GLSL %s for ID %s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+			File::WriteStringToFile(true, buffer, modernGLSLPath);
 		}
 	}
 #endif
