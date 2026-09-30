@@ -16,7 +16,9 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <cstdio>
+#include <cstring>
 #include <sstream>
+#include <bitset>
 
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
@@ -34,7 +36,13 @@
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
 
+#include "Common/File/FileUtil.h"
+#include "Core/Util/PathUtil.h"
+
 #define WRITE(p, ...) p.F(__VA_ARGS__)
+
+// Legacy custom-GLSL export/override support from the old patch.
+#define __FRAGMENT_GLSL_FILE__
 
 static const SamplerDef samplersMono[3] = {
 	{ 0, "tex" },
@@ -184,6 +192,76 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	bool needFragCoord = readFramebufferTex || gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 	bool writeDepth = (gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT) || fsDepthClamp) && !forceDepthWritesOff;
+
+	// Keep the historical Fragment_0x*.glsl IDs stable.
+	// Removed legacy fields stay at their old bit positions as zero.
+	enum LegacyFragmentFlag {
+		_LEGACY_HIGHP_FOG = 0,
+		_LEGACY_FRAGMENT_TEST_CACHE,
+		_LEGACY_TEXTURE_3D,
+		_LEGACY_LMODE,
+		_LEGACY_DO_TEXTURE,
+		_LEGACY_ENABLE_FOG,
+		_LEGACY_ALPHA_TEST,
+		_LEGACY_ALPHA_AGAINST_ZERO,
+		_LEGACY_TEST_FORCE_TO_ZERO,
+		_LEGACY_COLOR_TEST,
+		_LEGACY_COLOR_AGAINST_ZERO,
+		_LEGACY_COLOR_DOUBLE,
+		_LEGACY_TEXTURE_PROJECTION,
+		_LEGACY_TEXTURE_ALPHA,
+		_LEGACY_FLAT_BUG,
+		_LEGACY_FLAT_SHADING,
+		_LEGACY_SHADER_DEPAL,
+		_LEGACY_SMOOTHED_DEPAL,
+		_LEGACY_BGRA_TEXTURE,
+		_LEGACY_COLOR_WRITE_MASK,
+		_LEGACY_SHADER_TEX_CLAMP,
+		_LEGACY_BLUE_TO_ALPHA,
+		_LEGACY_CLEAR_MODE,
+		_LEGACY_DISCARD_STENCIL_WORKAROUND,
+		_LEGACY_READ_FRAMEBUFFER,
+		_LEGACY_READ_FRAMEBUFFER_TEX,
+		_LEGACY_FRAG_COORD,
+		_LEGACY_WRITE_DEPTH,
+	};
+
+	std::bitset<28> legacyFlags;
+	legacyFlags.set(_LEGACY_HIGHP_FOG, highpFog);
+	legacyFlags.set(_LEGACY_FRAGMENT_TEST_CACHE, enableFragmentTestCache);
+	legacyFlags.set(_LEGACY_TEXTURE_3D, texture3D);
+	legacyFlags.set(_LEGACY_LMODE, lmode);
+	legacyFlags.set(_LEGACY_DO_TEXTURE, doTexture);
+	legacyFlags.set(_LEGACY_ENABLE_FOG, enableFog);
+	legacyFlags.set(_LEGACY_ALPHA_TEST, enableAlphaTest);
+	legacyFlags.set(_LEGACY_ALPHA_AGAINST_ZERO, alphaTestAgainstZero);
+	legacyFlags.set(_LEGACY_TEST_FORCE_TO_ZERO, testForceToZero);
+	legacyFlags.set(_LEGACY_COLOR_TEST, enableColorTest);
+	legacyFlags.set(_LEGACY_COLOR_AGAINST_ZERO, colorTestAgainstZero);
+	legacyFlags.set(_LEGACY_COLOR_DOUBLE, false);       // removed
+	legacyFlags.set(_LEGACY_TEXTURE_PROJECTION, doTextureProjection);
+	legacyFlags.set(_LEGACY_TEXTURE_ALPHA, false);      // removed
+	legacyFlags.set(_LEGACY_FLAT_BUG, flatBug);
+	legacyFlags.set(_LEGACY_FLAT_SHADING, doFlatShading);
+	legacyFlags.set(_LEGACY_SHADER_DEPAL, shaderDepalMode != ShaderDepalMode::OFF);
+	legacyFlags.set(_LEGACY_SMOOTHED_DEPAL, false);     // removed
+	legacyFlags.set(_LEGACY_BGRA_TEXTURE, false);       // removed
+	legacyFlags.set(_LEGACY_COLOR_WRITE_MASK, colorWriteMask);
+	legacyFlags.set(_LEGACY_SHADER_TEX_CLAMP, needShaderTexClamp);
+	legacyFlags.set(_LEGACY_BLUE_TO_ALPHA, blueToAlpha);
+	legacyFlags.set(_LEGACY_CLEAR_MODE, isModeClear);
+	legacyFlags.set(_LEGACY_DISCARD_STENCIL_WORKAROUND, useDiscardStencilBugWorkaround);
+	legacyFlags.set(_LEGACY_READ_FRAMEBUFFER, needFramebufferRead);
+	legacyFlags.set(_LEGACY_READ_FRAMEBUFFER_TEX, readFramebufferTex);
+	legacyFlags.set(_LEGACY_FRAG_COORD, needFragCoord);
+	legacyFlags.set(_LEGACY_WRITE_DEPTH, writeDepth);
+	const unsigned long legacyFlagValue = legacyFlags.to_ulong();
+
+#ifdef __FRAGMENT_GLSL_FILE__
+	const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
+	const std::string customGLSLName = StringFromFormat("Fragment_0x%lx.glsl", legacyFlagValue);
+	const Path customGLSLPath = customGLSLDir / customGLSLName;
+#endif
 
 	// TODO: We could have a separate mechanism to support more ops using the shader blending mechanism,
 // on hardware that can do proper bit math in fragment shaders.
@@ -415,6 +493,44 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 		if (fsMinmaxDiscard || fsDepthClamp) {
 			WRITE(p, "%s highp vec2 v_zw;\n", compat.varying_fs);
+		}
+
+		// Extra interface used by the legacy custom GLSL/PBR shader files.
+		// Declare these before main() so the generated shader remains valid GLSL.
+		if (compat.gles && (legacyFlagValue == 0x32 || legacyFlagValue == 0x2032)) {
+			WRITE(p, "%s %s lowp flat int flag;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_1;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_2;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_3;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_4;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_5;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_6;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_7;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_8;\n", shading, compat.varying_fs);
+
+			// Active legacy PBR implementation from the 2022 patch.
+			// It is restricted to the historical fragment IDs.
+			if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage) &&
+					(legacyFlagValue == 0x32 || legacyFlagValue == 0x2032)) {
+				WRITE(p, "vec3 albedo;\n");
+				WRITE(p, "float metallic = 0.5;\n");
+				WRITE(p, "float roughness = 0.15;\n");
+				WRITE(p, "vec3 lightPositions[2];\n");
+				WRITE(p, "vec3 lightColors[2];\n");
+				WRITE(p, "vec3 camPos = vec3(0.0, 0.0, 50.0);\n");
+				WRITE(p, "const float PI = 3.14159265359;\n");
+				WRITE(p, "float lightness(float R, float G, float B) { return pow(pow(R / 1.0, 2.2) + pow(G / 0.666666, 2.2) + pow(B / 1.666666, 2.2), 1.0 / 2.2) * 0.547373; }\n");
+				WRITE(p, "float DistributionGGX(vec3 N, vec3 H, float roughness) { float a = roughness * roughness; float a2 = a * a; float NdotH = max(dot(N, H), 0.0); float NdotH2 = NdotH * NdotH; float nom = a2; float denom = (NdotH2 * (a2 - 1.0) + 1.0); denom = PI * denom * denom; return nom / denom; }\n");
+				WRITE(p, "float GeometrySchlickGGX(float NdotV, float roughness) { float r = roughness + 1.0; float k = (r * r) / 8.0; return NdotV / (NdotV * (1.0 - k) + k); }\n");
+				WRITE(p, "float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) { float NdotV = max(dot(N, V), 0.0); float NdotL = max(dot(N, L), 0.0); return GeometrySchlickGGX(NdotL, roughness) * GeometrySchlickGGX(NdotV, roughness); }\n");
+				WRITE(p, "vec3 fresnelSchlick(float cosTheta, vec3 F0) { return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0); }\n");
+				WRITE(p, "void PBR__2_0() {\n");
+				WRITE(p, " vec3 N = normalize(v_1.xyz); vec3 fogcolor = vec3(mix(vec3(dot(u_fogcolor, vec3(0.299, 0.587, 0.114))), u_fogcolor, 0.5)); float l = lightness(u_fogcolor.r, u_fogcolor.g, u_fogcolor.b); vec3 ld; float ll; float minv; fogcolor += 0.75 - l; vec3 fogcolor_inverse = 1.0 - fogcolor; vec3 diff1, diff2;\n");
+				WRITE(p, " if (l < 0.15) { minv = 0.2; ll = 1.5; ld = normalize(v_5.xyz); ld.z = abs(ld.z) * 7.0; diff1 = fogcolor * ll; diff2 = fogcolor_inverse * ll; lightPositions[0].z = v_3.z * 1000.0; lightPositions[1].z = v_4.z * 1000.0; lightColors[0] = fogcolor_inverse; lightColors[1] = fogcolor; } else { minv = 0.1; ll = 2.0; ld = normalize(v_4.xyz); ld.z = abs(ld.z) * 5.0; diff1 = fogcolor_inverse; diff2 = fogcolor * ll; lightPositions[0].z = v_4.z * 1000.0; lightPositions[1].z = v_3.z * 1000.0; lightColors[0] = fogcolor; lightColors[1] = fogcolor_inverse; }\n");
+				WRITE(p, " lightPositions[0].x = N.x * 1000.0; lightPositions[0].y = N.y * 2000.0; lightPositions[1].x = N.x * 3500.0; lightPositions[1].y = N.y * 5000.0; vec3 lightDir = normalize(ld * 1000.0 - v_2.xyz); float diff = max(dot(N, lightDir), 0.0); if (diff < minv) diff = minv; vec3 diffColor = mix(diff1, diff2, diff);\n");
+				WRITE(p, " if (gl_FragCoord.w > 0.015) { vec3 V = normalize(camPos - v_2.xyz); vec3 F0 = mix(vec3(0.04), albedo, metallic); vec3 Lo = vec3(0.0); for (int i = 0; i < 2; ++i) { vec3 L = normalize(lightPositions[i] - v_2.xyz); vec3 H = normalize(V + L); float NDF = DistributionGGX(N, H, roughness); float G = GeometrySmith(N, V, L, roughness); vec3 F = fresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0); vec3 specular = (NDF * G * F) / (4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001); vec3 kS = F; vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic); float NdotL = max(dot(N, L), 0.0); Lo += (kD * albedo / PI + specular) * lightColors[i] * NdotL; } vec3 color = Lo + albedo; color = color / (color + vec3(1.0)); color *= diffColor; %s = vec4(color, 1.0); }\n", compat.fragColor0);
+				WRITE(p, "}\n");
+			}
 		}
 
 		if (!enableFragmentTestCache) {
@@ -1223,8 +1339,40 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 		WRITE(p, "  return outfragment;\n");
 	}
+	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage) &&
+			(legacyFlagValue == 0x32 || legacyFlagValue == 0x2032)) {
+		WRITE(p, " if (flag == 1) {\n");
+		WRITE(p, "  albedo = t.xyz;\n");
+		WRITE(p, "  PBR__2_0();\n");
+		WRITE(p, " }\n");
+	}
 
 	WRITE(p, "}\n");
+
+#ifdef __FRAGMENT_GLSL_FILE__
+	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		Path shaderPath = customGLSLPath;
+		// The old generator could produce 0x2032 because bit 13 (TEXALPHA)
+		// existed then. Modern PPSSPP no longer has that bit, so allow an
+		// existing legacy 0x2032 file to remain usable as an alias.
+		if (legacyFlagValue == 0x32) {
+			Path legacy2032 = customGLSLDir / "Fragment_0x2032.glsl";
+			std::string legacyCode;
+			if (File::ReadTextFileToString(legacy2032, &legacyCode) && !File::Exists(shaderPath))
+				shaderPath = legacy2032;
+		}
+		std::string customCode;
+		if (File::ReadTextFileToString(shaderPath, &customCode)) {
+			if (!customCode.empty() && customCode.size() < 16384) {
+				std::memcpy(buffer, customCode.data(), customCode.size());
+				buffer[customCode.size()] = '\0';
+			}
+		} else {
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, buffer, customGLSLPath);
+		}
+	}
+#endif
 
 	return true;
 }
