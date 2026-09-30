@@ -1326,36 +1326,49 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 		std::string customCode;
 		bool customShaderFound = File::ReadTextFileToString(modernGLSLPath, &customCode);
-		if (customShaderFound) {
-			DEBUG_LOG(Log::G3D, "Found modern fragment GLSL %s for ID %s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
-		}
+		Path loadedGLSLPath = modernGLSLPath;
+		const char *loadedSource = "modern";
 		auto tryLegacyShader = [&](const Path &path) {
 			if (!File::ReadTextFileToString(path, &customCode))
 				return false;
 			if (!id.HasMatchingIDComment(customCode)) {
-				DEBUG_LOG(Log::G3D, "Ignoring legacy fragment GLSL %s for modern ID %s", path.c_str(), id.ToDebugString().c_str());
+				DEBUG_LOG(Log::G3D, "[GLSL] Ignored legacy fragment file=%s ID=%s (header ID mismatch)", path.c_str(), id.ToDebugString().c_str());
 				customCode.clear();
 				return false;
 			}
-			DEBUG_LOG(Log::G3D, "Using compatible legacy fragment GLSL %s for ID %s", path.c_str(), id.ToDebugString().c_str());
 			return true;
 		};
 		if (!customShaderFound) {
 			customShaderFound = tryLegacyShader(legacyGLSLPath);
+			if (customShaderFound) {
+				loadedGLSLPath = legacyGLSLPath;
+				loadedSource = "legacy";
+			}
 			// Older versions also included the removed TEXALPHA bit in this filename.
 			if (!customShaderFound && legacyFlagValue == 0x32) {
-				customShaderFound = tryLegacyShader(customGLSLDir / "Fragment_0x2032.glsl");
+				Path oldLegacyPath = customGLSLDir / "Fragment_0x2032.glsl";
+				customShaderFound = tryLegacyShader(oldLegacyPath);
+				if (customShaderFound) {
+					loadedGLSLPath = oldLegacyPath;
+					loadedSource = "legacy";
+				}
 			}
 		}
 		if (customShaderFound) {
 			if (!customCode.empty() && customCode.size() < 16384) {
 				std::memcpy(buffer, customCode.data(), customCode.size());
 				buffer[customCode.size()] = '\0';
+				DEBUG_LOG(Log::G3D, "[GLSL] Loaded fragment file=%s source=%s ID=%s", loadedGLSLPath.c_str(), loadedSource, id.ToDebugString().c_str());
+			} else {
+				DEBUG_LOG(Log::G3D, "[GLSL] Ignored empty or oversized fragment file=%s ID=%s size=%u", loadedGLSLPath.c_str(), id.ToDebugString().c_str(), (unsigned)customCode.size());
 			}
 		} else {
 			File::CreateFullPath(customGLSLDir);
-			DEBUG_LOG(Log::G3D, "Storing generated fragment GLSL %s for ID %s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
-			File::WriteStringToFile(true, buffer, modernGLSLPath);
+			if (File::WriteStringToFile(true, buffer, modernGLSLPath)) {
+				DEBUG_LOG(Log::G3D, "[GLSL] Generated fragment file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+			} else {
+				WARN_LOG(Log::G3D, "[GLSL] Failed to generate fragment file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+			}
 		}
 	}
 #endif

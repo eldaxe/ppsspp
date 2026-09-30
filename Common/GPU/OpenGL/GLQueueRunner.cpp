@@ -248,7 +248,7 @@ void GLQueueRunner::RunInitSteps(const FastVec<GLRInitStep> &steps, bool skipGLC
 				if (!anyFailed)
 					Reporting::ReportMessage("Error in shader program link: info: %s\nfs: %s\n%s\nvs: %s\n%s", infoLog.c_str(), fsDesc.c_str(), fsCode, vsDesc.c_str(), vsCode);
 
-				ERROR_LOG(Log::G3D, "Could not link program:\n %s", infoLog.c_str());
+				ERROR_LOG(Log::G3D, "[GLSL] Program link failed: %s", infoLog.c_str());
 				ERROR_LOG(Log::G3D, "VS desc:\n%s", vsDesc.c_str());
 				ERROR_LOG(Log::G3D, "FS desc:\n%s", fsDesc.c_str());
 				ERROR_LOG(Log::G3D, "VS:\n%s\n", LineNumberString(vsCode).c_str());
@@ -263,6 +263,11 @@ void GLQueueRunner::RunInitSteps(const FastVec<GLRInitStep> &steps, bool skipGLC
 #endif
 				CHECK_GL_ERROR_IF_DEBUG();
 				break;
+			}
+			if (step.create_program.num_shaders == 2) {
+				DEBUG_LOG(Log::G3D, "[GLSL] Program link succeeded VS=%s FS=%s", step.create_program.shaders[0]->desc.c_str(), step.create_program.shaders[1]->desc.c_str());
+			} else {
+				DEBUG_LOG(Log::G3D, "[GLSL] Program link succeeded shaderCount=%d", step.create_program.num_shaders);
 			}
 
 			glUseProgram(program->program);
@@ -308,9 +313,10 @@ void GLQueueRunner::RunInitSteps(const FastVec<GLRInitStep> &steps, bool skipGLC
 			if (!success) {
 				std::string infoLog = GetInfoLog(shader, glGetShaderiv, glGetShaderInfoLog);
 				std::string errorString = StringFromFormat(
-					"Error in shader compilation for: %s\n"
+					"[GLSL] Compile failed stage=%s shader=%s\n"
 					"Info log: %s\n"
 					"Shader source:\n%s\n//END\n\n",
+					step.create_shader.stage == GL_VERTEX_SHADER ? "vertex" : "fragment",
 					step.create_shader.shader->desc.c_str(),
 					infoLog.c_str(),
 					LineNumberString(code).c_str());
@@ -329,6 +335,8 @@ void GLQueueRunner::RunInitSteps(const FastVec<GLRInitStep> &steps, bool skipGLC
 #endif
 				step.create_shader.shader->failed = true;
 				step.create_shader.shader->error = infoLog;  // Hm, we never use this.
+			} else {
+				DEBUG_LOG(Log::G3D, "[GLSL] Compile succeeded stage=%s shader=%s", step.create_shader.stage == GL_VERTEX_SHADER ? "vertex" : "fragment", step.create_shader.shader->desc.c_str());
 			}
 			// Before we throw away the code, attach it to the shader for debugging.
 			step.create_shader.shader->code = code;

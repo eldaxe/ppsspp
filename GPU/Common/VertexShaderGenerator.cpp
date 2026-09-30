@@ -1063,27 +1063,33 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 		std::string customCode;
 		bool customShaderFound = File::ReadTextFileToString(modernGLSLPath, &customCode);
-		if (customShaderFound) {
-			DEBUG_LOG(Log::G3D, "Found modern vertex GLSL %s for ID %s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
-		}
+		Path loadedGLSLPath = modernGLSLPath;
+		const char *loadedSource = "modern";
 		if (!customShaderFound && File::ReadTextFileToString(legacyGLSLPath, &customCode)) {
 			if (!id.HasMatchingIDComment(customCode)) {
-				DEBUG_LOG(Log::G3D, "Ignoring legacy vertex GLSL %s for modern ID %s", legacyGLSLPath.c_str(), id.ToDebugString().c_str());
+				DEBUG_LOG(Log::G3D, "[GLSL] Ignored legacy vertex file=%s ID=%s (header ID mismatch)", legacyGLSLPath.c_str(), id.ToDebugString().c_str());
 				customCode.clear();
 			} else {
 				customShaderFound = true;
-				DEBUG_LOG(Log::G3D, "Using compatible legacy vertex GLSL %s for ID %s", legacyGLSLPath.c_str(), id.ToDebugString().c_str());
+				loadedGLSLPath = legacyGLSLPath;
+				loadedSource = "legacy";
 			}
 		}
 		if (customShaderFound) {
 			if (!customCode.empty() && customCode.size() < 16384) {
 				std::memcpy(buffer, customCode.data(), customCode.size());
 				buffer[customCode.size()] = '\0';
+				DEBUG_LOG(Log::G3D, "[GLSL] Loaded vertex file=%s source=%s ID=%s", loadedGLSLPath.c_str(), loadedSource, id.ToDebugString().c_str());
+			} else {
+				DEBUG_LOG(Log::G3D, "[GLSL] Ignored empty or oversized vertex file=%s ID=%s size=%u", loadedGLSLPath.c_str(), id.ToDebugString().c_str(), (unsigned)customCode.size());
 			}
 		} else {
 			File::CreateFullPath(customGLSLDir);
-			DEBUG_LOG(Log::G3D, "Storing generated vertex GLSL %s for ID %s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
-			File::WriteStringToFile(true, buffer, modernGLSLPath);
+			if (File::WriteStringToFile(true, buffer, modernGLSLPath)) {
+				DEBUG_LOG(Log::G3D, "[GLSL] Generated vertex file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+			} else {
+				WARN_LOG(Log::G3D, "[GLSL] Failed to generate vertex file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+			}
 		}
 	}
 #endif
