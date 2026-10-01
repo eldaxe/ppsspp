@@ -40,6 +40,9 @@
 #include "Core/Util/PathUtil.h"
 
 #define WRITE(p, ...) p.F(__VA_ARGS__)
+#define __FRAGMENT_GLSL_FILE__
+#define NORMAL_TEXTURE
+//#define EXTEND_TEXTURE
 
 // Legacy custom-GLSL export/override support from the old patch.
 #define __FRAGMENT_GLSL_FILE__
