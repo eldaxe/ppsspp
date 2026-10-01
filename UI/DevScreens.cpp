@@ -95,6 +95,7 @@ static const char *logLevelList[] = {
 static const char *g_debugOverlayList[] = {
 	"Off",
 	"Debug stats",
+	"Log View",
 	"Draw Frametimes Graph",
 	"Frame timing",
 #ifdef USE_PROFILER
