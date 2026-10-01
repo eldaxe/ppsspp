@@ -16,6 +16,11 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "Common/StringUtils.h"
+#include <bitset>
+#include <cstring>
+
+#include "Common/File/FileUtil.h"
+#include "Core/Util/PathUtil.h"
 #include "Common/GPU/OpenGL/GLFeatures.h"
 #include "Common/GPU/ShaderWriter.h"
 #include "Common/GPU/thin3d.h"
@@ -31,6 +36,9 @@
 #undef WRITE
 
 #define WRITE(p, ...) p.F(__VA_ARGS__)
+
+// Legacy custom-GLSL export/override support from the old patch.
+#define __VERTEXT_GLSL_FILE__
 
 // Depth range and viewport
 //
@@ -162,6 +170,76 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	}
 
 	bool texCoordInVec3 = false;
+
+	// Keep the historical Vertex_0x*.glsl IDs stable.
+	// Removed bone/tessellation fields stay at their old bit positions as zero.
+	enum LegacyVertexFlag {
+		_LEGACY_HIGHP_FOG = 0,
+		_LEGACY_HIGHP_TEXCOORD,
+		_LEGACY_MODE_THROUGH,
+		_LEGACY_LMODE,
+		_LEGACY_DO_TEXTURE,
+		_LEGACY_TEXTURE_TRANSFORM,
+		_LEGACY_SHADE_MAPPING,
+		_LEGACY_FLAT_BUG,
+		_LEGACY_ZW_HACK,
+		_LEGACY_FLAT_SHADING,
+		_LEGACY_HW_TRANSFORM,
+		_LEGACY_HAS_COLOR,
+		_LEGACY_HAS_NORMAL,
+		_LEGACY_HAS_TEXCOORD,
+		_LEGACY_ENABLE_FOG,
+		_LEGACY_FLIP_NORMAL,
+		_LEGACY_ENABLE_BONES,
+		_LEGACY_ENABLE_LIGHTING,
+		_LEGACY_BEZIER,
+		_LEGACY_SPLINE,
+		_LEGACY_COLOR_TESS,
+		_LEGACY_TEXCOORD_TESS,
+		_LEGACY_NORMAL_TESS,
+		_LEGACY_FLIP_NORMAL_TESS,
+		_LEGACY_TEXCOORD_VEC3,
+		_LEGACY_VERTEX_RANGE_CULLING,
+	};
+
+	std::bitset<26> legacyFlags;
+	legacyFlags.set(_LEGACY_HIGHP_FOG, highpFog);
+	legacyFlags.set(_LEGACY_HIGHP_TEXCOORD, highpTexcoord);
+	legacyFlags.set(_LEGACY_MODE_THROUGH, isModeThrough);
+	legacyFlags.set(_LEGACY_LMODE, lmode);
+	// Modern VertexShaderGenerator no longer has a separate doTexture bit.
+	// hasTexcoord preserves the old ID for the existing custom shader cases.
+	legacyFlags.set(_LEGACY_DO_TEXTURE, hasTexcoord);
+	legacyFlags.set(_LEGACY_TEXTURE_TRANSFORM, doTextureTransform);
+	legacyFlags.set(_LEGACY_SHADE_MAPPING, doShadeMapping);
+	legacyFlags.set(_LEGACY_FLAT_BUG, flatBug);
+	legacyFlags.set(_LEGACY_ZW_HACK, fsMinmaxDiscard || fsDepthClamp);
+	legacyFlags.set(_LEGACY_FLAT_SHADING, doFlatShading);
+	legacyFlags.set(_LEGACY_HW_TRANSFORM, useHWTransform);
+	legacyFlags.set(_LEGACY_HAS_COLOR, hasColor);
+	legacyFlags.set(_LEGACY_HAS_NORMAL, hasNormal);
+	legacyFlags.set(_LEGACY_HAS_TEXCOORD, hasTexcoord);
+	// Modern PPSSPP always forwards fog depth; preserve the historical bit.
+	legacyFlags.set(_LEGACY_ENABLE_FOG, true);
+	legacyFlags.set(_LEGACY_FLIP_NORMAL, flipNormal);
+	legacyFlags.set(_LEGACY_ENABLE_BONES, false);       // removed
+	legacyFlags.set(_LEGACY_ENABLE_LIGHTING, enableLighting);
+	legacyFlags.set(_LEGACY_BEZIER, false);              // removed
+	legacyFlags.set(_LEGACY_SPLINE, false);              // removed
+	legacyFlags.set(_LEGACY_COLOR_TESS, false);         // removed
+	legacyFlags.set(_LEGACY_TEXCOORD_TESS, false);      // removed
+	legacyFlags.set(_LEGACY_NORMAL_TESS, false);        // removed
+	legacyFlags.set(_LEGACY_FLIP_NORMAL_TESS, false);   // removed
+	legacyFlags.set(_LEGACY_TEXCOORD_VEC3, texCoordInVec3);
+	legacyFlags.set(_LEGACY_VERTEX_RANGE_CULLING, rangeCulling);
+	const unsigned long legacyFlagValue = legacyFlags.to_ulong();
+
+#ifdef __VERTEXT_GLSL_FILE__
+	const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
+	const std::string customGLSLName = StringFromFormat("Vertex_0x%lx.glsl", legacyFlagValue);
+	const Path customGLSLPath = customGLSLDir / customGLSLName;
+#endif
+
 
 	const char *minZClipPlaneSuffix = "[0]";
 	const char *maxZClipPlaneSuffix = "[1]";
@@ -420,6 +498,23 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 
 		if (fsMinmaxDiscard || fsDepthClamp) {
 			WRITE(p, "%s highp vec2 v_zw;\n", compat.varying_vs);
+		}
+
+		// 2022 custom GLSL interface. The flag/vertex assignment block from
+		// the 2022 interface assignment is emitted here so custom GLSL can use it.
+		if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+			WRITE(p, "//****** my_varying_vs *********\n");
+			WRITE(p, "%s lowp flat int flag;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_1;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_2;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_3;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_4;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_5;\n", compat.varying_vs);
+#ifdef __VERTEXT_GLSL_FILE__
+			WRITE(p, "%s highp vec4 v_6;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_7;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_8;\n", compat.varying_vs);
+#endif
 		}
 	}
 
@@ -964,6 +1059,60 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	if (compat.shaderLanguage == HLSL_D3D11) {
 		WRITE(p, "  return Out;\n");
 	}
+	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		if (legacyFlagValue == 0x2027410) {
+			WRITE(p, " flag = 1;\n");
+			WRITE(p, "  mat3 v;\n");
+			WRITE(p, "  v[0] = vec3(u_view[0].xyz);\n");
+			WRITE(p, "  v[1] = vec3(u_view[1].xyz);\n");
+			WRITE(p, "  v[2] = vec3(u_view[2].xyz);\n");
+			WRITE(p, "  v_1 = vec4(worldnormal.xyz, 1.0);\n");
+			WRITE(p, "  v_2 = vec4(worldpos, 1.0);\n");
+			WRITE(p, "  v_3 = vec4(normalize(vec3(0.0, 10000.0, 2000.0) * v), 1.0);\n");
+			WRITE(p, "  v_4 = vec4(normalize(vec3(0.0, 10000.0, -2000.0) * v), 1.0);\n");
+			WRITE(p, "  v_5 = vec4(v_3.x, -v_3.y, v_3.z, 1.0);\n");
+		} else if (legacyFlagValue == 0x2006410) {
+			WRITE(p, " flag = 2;\n");
+		} else {
+			WRITE(p, " flag = 0;\n");
+		}
+	}
 	WRITE(p, "}\n");
+#ifdef __VERTEXT_GLSL_FILE__
+	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		WRITE(p, "\n");
+		if (highpFog) WRITE(p, "// highpFog 0\n");
+		if (highpTexcoord) WRITE(p, "// highpTexcoord 1\n");
+		if (isModeThrough) WRITE(p, "// isModeThrough 2\n");
+		if (lmode) WRITE(p, "// lmode 3\n");
+		if (hasTexcoord) WRITE(p, "// doTexture 4\n");
+		if (doTextureTransform) WRITE(p, "// doTextureTransform 5\n");
+		if (doShadeMapping) WRITE(p, "// doShadeMapping 6\n");
+		if (flatBug) WRITE(p, "// flatBug 7\n");
+		if (fsMinmaxDiscard || fsDepthClamp) WRITE(p, "// needsZWHack 8\n");
+		if (doFlatShading) WRITE(p, "// doFlatShading 9\n");
+		if (useHWTransform) WRITE(p, "// useHWTransform 10\n");
+		if (hasColor) WRITE(p, "// hasColor 11\n");
+		if (hasNormal) WRITE(p, "// hasNormal 12\n");
+		if (hasTexcoord) WRITE(p, "// hasTexcoord 13\n");
+		WRITE(p, "// enableFog 14\n");
+		if (flipNormal) WRITE(p, "// flipNormal 15\n");
+		if (enableLighting) WRITE(p, "// enableLighting 17\n");
+		if (texCoordInVec3) WRITE(p, "// texCoordInVec3 24\n");
+		if (rangeCulling) WRITE(p, "// vertexRangeCulling 25\n");
+		WRITE(p, "//flag_value: 0x%lx\n", legacyFlagValue);
+
+		std::string customCode;
+		if (File::ReadTextFileToString(customGLSLPath, &customCode)) {
+			if (!customCode.empty() && customCode.size() < 16384) {
+				std::memcpy(buffer, customCode.data(), customCode.size());
+				buffer[customCode.size()] = '\0';
+			}
+		} else {
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, buffer, customGLSLPath);
+		}
+	}
+#endif
 	return true;
 }
