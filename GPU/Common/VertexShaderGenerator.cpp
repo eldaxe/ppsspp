@@ -32,9 +32,6 @@
 #include "GPU/Common/ShaderUniforms.h"
 #include "GPU/Common/VertexShaderGenerator.h"
 
-#include "rapidjson/document.h"
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
 #include "GPU/Vulkan/DrawEngineVulkan.h"
 
 #undef WRITE
