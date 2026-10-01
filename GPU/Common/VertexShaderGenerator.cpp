@@ -502,8 +502,9 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "%s highp vec2 v_zw;\n", compat.varying_vs);
 		}
 
-		// Extra interface used by the legacy custom GLSL/PBR shader files.
-		if (compat.gles && (legacyFlagValue == 0x2027410 || legacyFlagValue == 0x2006410)) {
+		// 2022 custom GLSL compatibility interface. Keep the full v_1..v_8
+		// interface available for every OpenGL ES custom vertex shader.
+		if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 			WRITE(p, "%s lowp flat int flag;\n", compat.varying_vs);
 			WRITE(p, "%s highp vec4 v_1;\n", compat.varying_vs);
 			WRITE(p, "%s highp vec4 v_2;\n", compat.varying_vs);
@@ -582,6 +583,30 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "  mediump vec3 worldnormal = normalizeOr001(mul(vec4(%snormal, 0.0), u_world).xyz);\n", flipNormal ? "-" : "");
 		} else {
 			WRITE(p, "  mediump vec3 worldnormal = normalizeOr001(mul(vec4(0.0, 0.0, %s1.0, 0.0), u_world).xyz);\n", flipNormal ? "-" : "");
+		}
+
+		// Active legacy custom-GLSL assignment. These are actual vertex outputs,
+		// not merely declarations, so the fragment shader can consume them.
+		if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+			if (legacyFlagValue == 0x2027410) {
+				WRITE(p, "  flag = 1;\n");
+				WRITE(p, "  mat3 v;\n");
+				WRITE(p, "  v[0] = vec3(u_view[0].xyz);\n");
+				WRITE(p, "  v[1] = vec3(u_view[1].xyz);\n");
+				WRITE(p, "  v[2] = vec3(u_view[2].xyz);\n");
+				WRITE(p, "  v_1 = vec4(worldnormal.xyz, 1.0);\n");
+				WRITE(p, "  v_2 = vec4(worldpos, 1.0);\n");
+				WRITE(p, "  v_3 = vec4(normalize(vec3(0.0, 10000.0, 2000.0) * v), 1.0);\n");
+				WRITE(p, "  v_4 = vec4(normalize(vec3(0.0, 10000.0, -2000.0) * v), 1.0);\n");
+				WRITE(p, "  v_5 = vec4(v_3.x, -v_3.y, v_3.z, 1.0);\n");
+			} else if (legacyFlagValue == 0x2006410) {
+				WRITE(p, "  flag = 2;\n");
+				WRITE(p, "  v_1 = vec4(0.0); v_2 = vec4(0.0); v_3 = vec4(0.0); v_4 = vec4(0.0); v_5 = vec4(0.0);\n");
+			} else {
+				WRITE(p, "  flag = 0;\n");
+				WRITE(p, "  v_1 = vec4(0.0); v_2 = vec4(0.0); v_3 = vec4(0.0); v_4 = vec4(0.0); v_5 = vec4(0.0);\n");
+			}
+			WRITE(p, "  v_6 = vec4(0.0); v_7 = vec4(0.0); v_8 = vec4(0.0);\n");
 		}
 
 		WRITE(p, "  vec4 viewPos = vec4(mul(vec4(worldpos, 1.0), u_view).xyz, 1.0);\n");

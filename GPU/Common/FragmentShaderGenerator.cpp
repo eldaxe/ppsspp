@@ -498,10 +498,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "%s highp vec2 v_zw;\n", compat.varying_fs);
 		}
 
-		// Extra interface used by the legacy custom GLSL/PBR shader files.
-		// Unlike the old patch, declare these before main() so the generated
-		// shader itself remains valid GLSL.
-		if (compat.gles && (legacyFlagValue == 0x32 || legacyFlagValue == 0x2032)) {
+		// 2022 custom GLSL compatibility interface. It is available for every
+		// OpenGL ES custom shader, not only the two historical fragment IDs.
+		if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 			WRITE(p, "%s %s lowp flat int flag;\n", shading, compat.varying_fs);
 			WRITE(p, "%s %s highp vec4 v_1;\n", shading, compat.varying_fs);
 			WRITE(p, "%s %s highp vec4 v_2;\n", shading, compat.varying_fs);
@@ -511,6 +510,33 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "%s %s highp vec4 v_6;\n", shading, compat.varying_fs);
 			WRITE(p, "%s %s highp vec4 v_7;\n", shading, compat.varying_fs);
 			WRITE(p, "%s %s highp vec4 v_8;\n", shading, compat.varying_fs);
+			if (!enableFog) {
+				*uniformMask |= DIRTY_FOGCOLOR;
+				WRITE(p, "uniform vec3 u_fogcolor;\n");
+			}
+
+			WRITE(p, "vec3 albedo = vec3(1.0);\n");
+			WRITE(p, "float metallic = 0.5;\n");
+			WRITE(p, "float roughness = 0.15;\n");
+			WRITE(p, "vec3 lightPositions[2] = vec3[2](vec3(0.0), vec3(0.0));\n");
+			WRITE(p, "vec3 lightColors[2] = vec3[2](vec3(1.0), vec3(1.0));\n");
+			WRITE(p, "vec3 camPos = vec3(0.0, 0.0, 50.0);\n");
+			WRITE(p, "const float PI = 3.14159265359;\n");
+			WRITE(p, "float DistributionGGX(vec3 N, vec3 H, float r) { float a=r*r; float a2=a*a; float d=max(dot(N,H),0.0); float den=PI*pow(d*d*(a2-1.0)+1.0,2.0); return a2/den; }\n");
+			WRITE(p, "float GeometrySchlickGGX(float n, float r) { float k=pow(r+1.0,2.0)/8.0; return n/(n*(1.0-k)+k); }\n");
+			WRITE(p, "float GeometrySmith(vec3 N, vec3 V, vec3 L, float r) { return GeometrySchlickGGX(max(dot(N,V),0.0),r)*GeometrySchlickGGX(max(dot(N,L),0.0),r); }\n");
+			WRITE(p, "vec3 fresnelSchlick(float c, vec3 F0) { return F0+(1.0-F0)*pow(clamp(1.0-c,0.0,1.0),5.0); }\n");
+			WRITE(p, "void PBR__2_0() {\n");
+			WRITE(p, "  vec3 N=normalize(v_1.xyz);\n");
+			WRITE(p, "  vec3 fog=max(u_fogcolor,vec3(0.001));\n");
+			WRITE(p, "  lightPositions[0]=vec3(N.x*1000.0,N.y*2000.0,v_3.z*1000.0);\n");
+			WRITE(p, "  lightPositions[1]=vec3(N.x*3500.0,N.y*5000.0,v_4.z*1000.0);\n");
+			WRITE(p, "  lightColors[0]=fog; lightColors[1]=vec3(1.0)-fog;\n");
+			WRITE(p, "  vec3 V=normalize(camPos-v_2.xyz); vec3 F0=mix(vec3(0.04),albedo,clamp(metallic,0.0,1.0)); vec3 Lo=vec3(0.0);\n");
+			WRITE(p, "  for(int i=0;i<2;i++){ vec3 L=normalize(lightPositions[i]-v_2.xyz); vec3 H=normalize(V+L); float ndf=DistributionGGX(N,H,clamp(roughness,0.04,1.0)); float g=GeometrySmith(N,V,L,clamp(roughness,0.04,1.0)); vec3 F=fresnelSchlick(max(dot(H,V),0.0),F0); vec3 spec=(ndf*g*F)/(4.0*max(dot(N,V),0.0)*max(dot(N,L),0.0)+0.0001); vec3 kD=(vec3(1.0)-F)*(1.0-clamp(metallic,0.0,1.0)); Lo+=(kD*albedo/PI+spec)*lightColors[i]*max(dot(N,L),0.0); }\n");
+			WRITE(p, "  vec3 color=(Lo+albedo); color=color/(color+vec3(1.0));\n");
+			WRITE(p, "  %s=vec4(color,1.0);\n", compat.fragColor0);
+			WRITE(p, "}\n");
 		}
 
 		if (!enableFragmentTestCache) {
@@ -1329,7 +1355,8 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		if (customShaderFound) {
 			DEBUG_LOG(Log::G3D, "Found modern fragment GLSL %s for ID %s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
 		}
-		auto tryLegacyShader = [&](const Path &path) {
+		auto tryLegacyShader = [&](unsigned long legacyValue) {
+			Path path = customGLSLDir / StringFromFormat("Fragment_0x%lx.glsl", legacyValue);
 			if (!File::ReadTextFileToString(path, &customCode))
 				return false;
 			if (!id.HasMatchingIDComment(customCode)) {
@@ -1341,10 +1368,16 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			return true;
 		};
 		if (!customShaderFound) {
-			customShaderFound = tryLegacyShader(legacyGLSLPath);
-			// Older versions also included the removed TEXALPHA bit in this filename.
-			if (!customShaderFound && legacyFlagValue == 0x32) {
-				customShaderFound = tryLegacyShader(customGLSLDir / "Fragment_0x2032.glsl");
+			// Removed modern fields occupied these legacy positions:
+			// bit 11 = color doubling, bit 13 = texture alpha, bits 17/18 = depal variants.
+			// Try every historical combination so files such as Fragment_0x207b.glsl remain usable.
+			const unsigned long removedBits = (1UL << 11) | (1UL << 13) | (1UL << 17) | (1UL << 18);
+			for (unsigned long mask = 0; mask < 16 && !customShaderFound; ++mask) {
+				unsigned long alias = legacyFlagValue;
+				for (int i = 0; i < 4; ++i)
+					if (mask & (1UL << i))
+						alias |= removedBits & (1UL << (11 + (i == 0 ? 0 : i == 1 ? 2 : i == 2 ? 6 : 7)));
+				customShaderFound = tryLegacyShader(alias);
 			}
 		}
 		if (customShaderFound) {
