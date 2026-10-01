@@ -5,6 +5,8 @@
 #include "Common/CPUDetect.h"
 #include "Common/StringUtils.h"
 #include "Common/Data/Text/StringWriter.h"
+#include "Common/Log/LogManager.h"
+#include "Common/UI/View.h"
 
 #include "Core/MIPS/MIPS.h"
 #include "Core/HW/Display.h"
@@ -28,7 +30,6 @@
 #include "GPU/Vulkan/DebugVisVulkan.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
 
-#include "UI/DevScreens.h"
 #include "UI/DebugOverlay.h"
 
 // For std::max
@@ -64,6 +65,25 @@ static void DrawDebugStats(UIContext *ctx, const Bounds &bounds) {
 	ctx->Draw()->SetFontScale(1.0f, 1.0f);
 	ctx->Flush();
 	ctx->RebindTexture();
+}
+
+static void DrawLogView(UIContext *ctx, const Bounds &bounds) {
+	const RingbufferLog &ring = g_logManager.GetRingbuffer();
+	const FontStyle &style = ctx->GetTheme().uiFontSmall;
+	const float lineHeight = (float)style.sizePts;
+
+	ctx->SetFontStyle(style);
+
+	const int maxLines = (int)(bounds.h / lineHeight);
+	const int lineCount = std::min(ring.GetCount(), maxLines);
+	for (int i = lineCount - 1; i >= 0; --i) {
+		const std::string line = std::string(StripSpaces(ring.TextAt(i)));
+		const uint32_t color = 0xFF000000 | LogManager::GetLevelColor(ring.LevelAt(i));
+		const float y = bounds.y + (lineCount - i - 1) * lineHeight;
+		ctx->DrawTextRect(line, Bounds(bounds.x, y, bounds.w, lineHeight), color, FLAG_DYNAMIC_ASCII);
+	}
+
+	ctx->SetFontStyle(ctx->GetTheme().uiFont);
 }
 
 static void DrawAudioDebugStats(UIContext *ctx, const Bounds &bounds) {
@@ -244,6 +264,10 @@ void DrawDebugOverlay(UIContext *ctx, const Bounds &bounds, DebugOverlay overlay
 	case DebugOverlay::DEBUG_STATS:
 		if (inGame)
 			DrawDebugStats(ctx, layoutBounds);
+		break;
+	case DebugOverlay::LOG_VIEW:
+		if (inGame)
+			DrawLogView(ctx, layoutBounds);
 		break;
 	case DebugOverlay::FRAME_GRAPH:
 		if (inGame)

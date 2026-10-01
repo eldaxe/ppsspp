@@ -272,6 +272,7 @@ enum class ScreenEdgePosition {
 enum class DebugOverlay : int {
 	OFF,
 	DEBUG_STATS,
+	LOG_VIEW,
 	FRAME_GRAPH,
 	FRAME_TIMING,
 #ifdef USE_PROFILER
