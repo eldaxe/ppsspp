@@ -506,7 +506,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 
 		// 2022 custom GLSL interface. The flag/vertex assignment block from
 		// the 2022 interface assignment is emitted here so custom GLSL can use it.
-		if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 			WRITE(p, "//****** my_varying_vs *********\n");
 			WRITE(p, "%s lowp flat int flag;\n", compat.varying_vs);
 			WRITE(p, "%s highp vec4 v_1;\n", compat.varying_vs);
@@ -1063,7 +1063,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	if (compat.shaderLanguage == HLSL_D3D11) {
 		WRITE(p, "  return Out;\n");
 	}
-	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 		if (legacyFlagValue == 0x2027410) {
 			WRITE(p, " flag = 1;\n");
 			WRITE(p, "  mat3 v;\n");
@@ -1083,7 +1083,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	}
 	WRITE(p, "}\n");
 #ifdef __VERTEXT_GLSL_FILE__
-	if (compat.gles && ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 		WRITE(p, "\n");
 		if (highpFog) WRITE(p, "// highpFog 0\n");
 		if (highpTexcoord) WRITE(p, "// highpTexcoord 1\n");
