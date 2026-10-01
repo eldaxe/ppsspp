@@ -1065,9 +1065,10 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		bool customShaderFound = File::ReadTextFileToString(modernGLSLPath, &customCode);
 		Path loadedGLSLPath = modernGLSLPath;
 		const char *loadedSource = "modern";
+		const char *selectedSource = "generated";
 		if (!customShaderFound && File::ReadTextFileToString(legacyGLSLPath, &customCode)) {
 			if (!id.HasMatchingIDComment(customCode)) {
-				DEBUG_LOG(Log::G3D, "[GLSL] Ignored legacy vertex file=%s ID=%s (header ID mismatch)", legacyGLSLPath.c_str(), id.ToDebugString().c_str());
+				NOTICE_LOG(Log::G3D, "[GLSL] Ignored legacy vertex file=%s ID=%s (header ID mismatch)", legacyGLSLPath.c_str(), id.ToDebugString().c_str());
 				customCode.clear();
 			} else {
 				customShaderFound = true;
@@ -1079,18 +1080,36 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			if (!customCode.empty() && customCode.size() < 16384) {
 				std::memcpy(buffer, customCode.data(), customCode.size());
 				buffer[customCode.size()] = '\0';
-				DEBUG_LOG(Log::G3D, "[GLSL] Loaded vertex file=%s source=%s ID=%s", loadedGLSLPath.c_str(), loadedSource, id.ToDebugString().c_str());
+				selectedSource = loadedSource;
+				NOTICE_LOG(Log::G3D, "[GLSL] Loaded vertex file=%s source=%s ID=%s bytes=%u", loadedGLSLPath.c_str(), loadedSource, id.ToDebugString().c_str(), (unsigned)customCode.size());
 			} else {
-				DEBUG_LOG(Log::G3D, "[GLSL] Ignored empty or oversized vertex file=%s ID=%s size=%u", loadedGLSLPath.c_str(), id.ToDebugString().c_str(), (unsigned)customCode.size());
+				NOTICE_LOG(Log::G3D, "[GLSL] Ignored empty or oversized vertex file=%s ID=%s size=%u", loadedGLSLPath.c_str(), id.ToDebugString().c_str(), (unsigned)customCode.size());
 			}
 		} else {
 			File::CreateFullPath(customGLSLDir);
 			if (File::WriteStringToFile(true, buffer, modernGLSLPath)) {
-				DEBUG_LOG(Log::G3D, "[GLSL] Generated vertex file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+				NOTICE_LOG(Log::G3D, "[GLSL] Generated vertex file=%s ID=%s bytes=%u", modernGLSLPath.c_str(), id.ToDebugString().c_str(), (unsigned)strlen(buffer));
 			} else {
-				WARN_LOG(Log::G3D, "[GLSL] Failed to generate vertex file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+				NOTICE_LOG(Log::G3D, "[GLSL] Failed to generate vertex file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
 			}
 		}
+		uint32_t enabledLightMask = 0;
+		for (int i = 0; i < 4; ++i) {
+			if (enableLighting && id.Bit(VS_BIT_LIGHT0_ENABLE + i))
+				enabledLightMask |= 1u << i;
+		}
+		NOTICE_LOG(Log::G3D, "[GLSL] Vertex state source=%s modernID=%s legacyID=0x%lx lighting=%d lightUber=%d lightMask=0x%x hwTransform=%d normal=%d texcoord=%d shadeMapping=%d",
+			selectedSource, id.ToDebugString().c_str(), legacyFlagValue, enableLighting, lightUberShader,
+			enabledLightMask, useHWTransform, hasNormal, hasTexcoord, doShadeMapping);
+		NOTICE_LOG(Log::G3D, "[GLSL] Vertex tokens ID=%s flag=%d flagAssign1=%d v_1=%d v_1Assign=%d v_2=%d v_2Assign=%d v_3=%d v_3Assign=%d v_4=%d v_4Assign=%d v_5=%d v_5Assign=%d v_6=%d v_7=%d v_8=%d",
+			id.ToDebugString().c_str(), strstr(buffer, "flag") != nullptr,
+			strstr(buffer, "flag = 1") != nullptr || strstr(buffer, "flag=1") != nullptr,
+			strstr(buffer, "v_1") != nullptr, strstr(buffer, "v_1 =") != nullptr || strstr(buffer, "v_1=") != nullptr,
+			strstr(buffer, "v_2") != nullptr, strstr(buffer, "v_2 =") != nullptr || strstr(buffer, "v_2=") != nullptr,
+			strstr(buffer, "v_3") != nullptr, strstr(buffer, "v_3 =") != nullptr || strstr(buffer, "v_3=") != nullptr,
+			strstr(buffer, "v_4") != nullptr, strstr(buffer, "v_4 =") != nullptr || strstr(buffer, "v_4=") != nullptr,
+			strstr(buffer, "v_5") != nullptr, strstr(buffer, "v_5 =") != nullptr || strstr(buffer, "v_5=") != nullptr,
+			strstr(buffer, "v_6") != nullptr, strstr(buffer, "v_7") != nullptr, strstr(buffer, "v_8") != nullptr);
 	}
 #endif
 	return true;

@@ -1328,11 +1328,12 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		bool customShaderFound = File::ReadTextFileToString(modernGLSLPath, &customCode);
 		Path loadedGLSLPath = modernGLSLPath;
 		const char *loadedSource = "modern";
+		const char *selectedSource = "generated";
 		auto tryLegacyShader = [&](const Path &path) {
 			if (!File::ReadTextFileToString(path, &customCode))
 				return false;
 			if (!id.HasMatchingIDComment(customCode)) {
-				DEBUG_LOG(Log::G3D, "[GLSL] Ignored legacy fragment file=%s ID=%s (header ID mismatch)", path.c_str(), id.ToDebugString().c_str());
+				NOTICE_LOG(Log::G3D, "[GLSL] Ignored legacy fragment file=%s ID=%s (header ID mismatch)", path.c_str(), id.ToDebugString().c_str());
 				customCode.clear();
 				return false;
 			}
@@ -1358,18 +1359,29 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			if (!customCode.empty() && customCode.size() < 16384) {
 				std::memcpy(buffer, customCode.data(), customCode.size());
 				buffer[customCode.size()] = '\0';
-				DEBUG_LOG(Log::G3D, "[GLSL] Loaded fragment file=%s source=%s ID=%s", loadedGLSLPath.c_str(), loadedSource, id.ToDebugString().c_str());
+				selectedSource = loadedSource;
+				NOTICE_LOG(Log::G3D, "[GLSL] Loaded fragment file=%s source=%s ID=%s bytes=%u", loadedGLSLPath.c_str(), loadedSource, id.ToDebugString().c_str(), (unsigned)customCode.size());
 			} else {
-				DEBUG_LOG(Log::G3D, "[GLSL] Ignored empty or oversized fragment file=%s ID=%s size=%u", loadedGLSLPath.c_str(), id.ToDebugString().c_str(), (unsigned)customCode.size());
+				NOTICE_LOG(Log::G3D, "[GLSL] Ignored empty or oversized fragment file=%s ID=%s size=%u", loadedGLSLPath.c_str(), id.ToDebugString().c_str(), (unsigned)customCode.size());
 			}
 		} else {
 			File::CreateFullPath(customGLSLDir);
 			if (File::WriteStringToFile(true, buffer, modernGLSLPath)) {
-				DEBUG_LOG(Log::G3D, "[GLSL] Generated fragment file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+				NOTICE_LOG(Log::G3D, "[GLSL] Generated fragment file=%s ID=%s bytes=%u", modernGLSLPath.c_str(), id.ToDebugString().c_str(), (unsigned)strlen(buffer));
 			} else {
-				WARN_LOG(Log::G3D, "[GLSL] Failed to generate fragment file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
+				NOTICE_LOG(Log::G3D, "[GLSL] Failed to generate fragment file=%s ID=%s", modernGLSLPath.c_str(), id.ToDebugString().c_str());
 			}
 		}
+		NOTICE_LOG(Log::G3D, "[GLSL] Fragment state source=%s modernID=%s legacyID=0x%lx texture=%d fog=%d stencilToAlpha=%d replaceAlpha=%d framebufferRead=%d",
+			selectedSource, id.ToDebugString().c_str(), legacyFlagValue, doTexture, enableFog,
+			id.Bits(FS_BIT_STENCIL_TO_ALPHA, 2), id.Bits(FS_BIT_REPLACE_ALPHA_WITH_STENCIL_TYPE, 4), needFramebufferRead);
+		NOTICE_LOG(Log::G3D, "[GLSL] Fragment tokens ID=%s flag=%d v_1=%d v_2=%d v_3=%d v_4=%d v_5=%d v_6=%d v_7=%d v_8=%d PBR__2_0=%d",
+			id.ToDebugString().c_str(), strstr(buffer, "flag") != nullptr,
+			strstr(buffer, "v_1") != nullptr, strstr(buffer, "v_2") != nullptr,
+			strstr(buffer, "v_3") != nullptr, strstr(buffer, "v_4") != nullptr,
+			strstr(buffer, "v_5") != nullptr, strstr(buffer, "v_6") != nullptr,
+			strstr(buffer, "v_7") != nullptr, strstr(buffer, "v_8") != nullptr,
+			strstr(buffer, "PBR__2_0") != nullptr);
 	}
 #endif
 
