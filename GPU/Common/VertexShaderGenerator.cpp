@@ -31,6 +31,10 @@
 #include "GPU/Common/ShaderId.h"
 #include "GPU/Common/ShaderUniforms.h"
 #include "GPU/Common/VertexShaderGenerator.h"
+
+#include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
 #include "GPU/Vulkan/DrawEngineVulkan.h"
 
 #undef WRITE
@@ -235,6 +239,38 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	const unsigned long legacyFlagValue = legacyFlags.to_ulong();
 
 #ifdef __VERTEXT_GLSL_FILE__
+	// 2022 compatibility metadata probe. Kept verbatim as a disabled compatibility
+	// block because the original patch shipped this mechanism, even though modern
+	// PPSSPP does not consume the JSON file.
+	/*
+	std::string json_path = customGLSLDir / (legacyGLSLName + ".varying.json");
+	std::ifstream vs_out_json_ifs(json_path);
+	char* json_code = nullptr;
+	int file_size = 0;
+	bool ParseOK = false;
+	if (vs_out_json_ifs.is_open()) {
+		vs_out_json_ifs.seekg(0, vs_out_json_ifs.end);
+		file_size = vs_out_json_ifs.tellg();
+		vs_out_json_ifs.seekg(0, vs_out_json_ifs.beg);
+		json_code = new char[file_size];
+		memset(json_code, 0x00, file_size);
+		vs_out_json_ifs.read(json_code, file_size);
+		delete [] json_code;
+		vs_out_json_ifs.close();
+	} else {
+		std::ofstream json_gen(json_path);
+		if (json_gen.is_open())
+			json_gen.close();
+	}
+
+	rapidjson::Document d;
+	if (json_code) {
+		if (!d.Parse(json_code).HasParseError()) {
+			if (d.IsObject()) ParseOK = true;
+		}
+	}
+	*/
+
 	const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
 	// New exports use the complete 64-bit VShaderID. The old 26-bit projection
 	// is retained only as a compatibility fallback for existing 2022 files.
