@@ -150,6 +150,7 @@ public:
 	bool UseHWTransform() const { return useHWTransform_; }  // only relevant for vtx shaders
 
 	std::string GetShaderString(DebugShaderStringType type, ShaderID id) const;
+	const std::string &GetLegacyEntryPoint() const { return legacyEntryPoint_; }
 
 	uint32_t GetAttrMask() const { return attrMask_; }
 	uint64_t GetUniformMask() const { return uniformMask_; }
@@ -157,6 +158,7 @@ public:
 private:
 	GLRenderManager *render_;
 	std::string source_;
+	std::string legacyEntryPoint_;
 	bool useHWTransform_;
 	bool isFragment_;
 	uint32_t attrMask_; // only used in vertex shaders
