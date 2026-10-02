@@ -4,6 +4,7 @@
 
 #include "Common/GPU/ShaderWriter.h"
 #include "Core/Config.h"
+#include "Core/Util/PathUtil.h"
 #include "Common/File/FileUtil.h"
 #include "Common/StringUtils.h"
 
@@ -58,6 +59,11 @@ inline void WriteLegacyPBRPrelude(ShaderWriter &p) {
 }
 
 inline bool LoadLegacyGLSLOverride(const std::string &stage, uint64_t shaderID, std::string *source) {
-	const Path path = g_Config.memStickDirectory / "PSP/SHADERS/GLSL" / (stage + "_" + StringFromFormat("%016llx", (unsigned long long)shaderID) + ".glsl");
+	// memStickDirectory may itself be the PSP directory on Android (e.g. /sdcard/PSP).
+	// GetSysDirectory(DIRECTORY_PSP) normalizes both cases:
+	//   /sdcard/PSP     -> /sdcard/PSP
+	//   /sdcard/PPSSPP   -> /sdcard/PPSSPP/PSP
+	const Path shaderDirectory = GetSysDirectory(DIRECTORY_PSP) / "SHADERS/GLSL";
+	const Path path = shaderDirectory / (stage + "_" + StringFromFormat("%016llx", (unsigned long long)shaderID) + ".glsl");
 	return File::ReadTextFileToString(path, source) && !source->empty() && source->size() + 1 < 32768;
 }
