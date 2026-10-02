@@ -71,16 +71,24 @@ static void DrawLogView(UIContext *ctx, const Bounds &bounds) {
 	const RingbufferLog &ring = g_logManager.GetRingbuffer();
 	const FontStyle &style = ctx->GetTheme().uiFontSmall;
 	const float lineHeight = (float)style.sizePts;
+	constexpr float marginX = 10.0f;
+	constexpr float marginY = 10.0f;
 
 	ctx->SetFontStyle(style);
 
-	const int maxLines = (int)(bounds.h / lineHeight);
+	const float contentWidth = std::max(0.0f, bounds.w - marginX * 2.0f);
+	const float contentHeight = std::max(0.0f, bounds.h - marginY * 2.0f);
+	const int maxLines = (int)(contentHeight / lineHeight);
 	const int lineCount = std::min(ring.GetCount(), maxLines);
+
+	// Draw each log record as exactly one line. DrawTextRect() may wrap long
+	// records, which causes subsequent records to overlap because each record
+	// only reserves one line of vertical space.
 	for (int i = lineCount - 1; i >= 0; --i) {
 		const std::string line = std::string(StripSpaces(ring.TextAt(i)));
 		const uint32_t color = 0xFF000000 | LogManager::GetLevelColor(ring.LevelAt(i));
-		const float y = bounds.y + (lineCount - i - 1) * lineHeight;
-		ctx->DrawTextRect(line, Bounds(bounds.x, y, bounds.w, lineHeight), color, FLAG_DYNAMIC_ASCII);
+		const float y = bounds.y + marginY + (lineCount - i - 1) * lineHeight;
+		ctx->Draw()->DrawText(line, bounds.x + marginX, y, color, ALIGN_TOPLEFT | FLAG_DYNAMIC_ASCII);
 	}
 
 	ctx->SetFontStyle(ctx->GetTheme().uiFont);
