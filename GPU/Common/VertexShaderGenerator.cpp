@@ -1160,6 +1160,11 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			File::WriteStringToFile(true, buffer, modernGLSLPath);
 			File::WriteStringToFile(true, buffer, legacyGLSLPath);
 		}
+		if (hasLegacyGLSL && customCode.size() < 16384) {
+			const std::string legacyEntryLine = std::string("// PPSSPP_LEGACY_ENTRY_POINT=") + legacyGLSLName + "\n";
+			if (customCode.rfind("// PPSSPP_LEGACY_ENTRY_POINT=", 0) != 0)
+				customCode.insert(0, legacyEntryLine);
+		}
 		if (!customCode.empty() && customCode.size() < 16384) {
 			std::memcpy(buffer, customCode.data(), customCode.size());
 			buffer[customCode.size()] = '\0';
