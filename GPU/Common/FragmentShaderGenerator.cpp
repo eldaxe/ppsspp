@@ -30,6 +30,7 @@
 #include "GPU/Common/ShaderId.h"
 #include "GPU/Common/ShaderUniforms.h"
 #include "GPU/Common/FragmentShaderGenerator.h"
+#include "GPU/Common/LegacyPBR.h"
 #include "GPU/Vulkan/DrawEngineVulkan.h"
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
@@ -69,6 +70,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	}
 
 	bool texture3D = id.Bit(FS_BIT_3D_TEXTURE);
+	bool doTextureAlpha = id.Bit(FS_BIT_LEGACY_PBR_ALPHA);
+	const bool legacyPBRFragmentBase = LegacyPBRFragmentBase(enableFragmentTestCache, id.Bit(FS_BIT_DO_TEXTURE), gstate.isFogEnabled());
+	const bool legacyPBRFragmentAlpha = legacyPBRFragmentBase && doTextureAlpha;
 	bool arrayTexture = id.Bit(FS_BIT_SAMPLE_ARRAY_TEXTURE);
 	bool forceDepthWritesOff = id.Bit(FS_BIT_DEPTH_TEST_NEVER);
 	bool useDiscardStencilBugWorkaround = id.Bit(FS_BIT_NO_DEPTH_CANNOT_DISCARD_STENCIL) && !forceDepthWritesOff;
@@ -415,6 +419,11 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 		if (fsMinmaxDiscard || fsDepthClamp) {
 			WRITE(p, "%s highp vec2 v_zw;\n", compat.varying_fs);
+		}
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
+			WRITE(p, "//****** my_varying_fs *********\n");
+			WriteLegacyPBRVaryingFS(p, shading, compat.varying_fs);
+			WriteLegacyPBRPrelude(p);
 		}
 
 		if (!enableFragmentTestCache) {
@@ -862,6 +871,24 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "  vec4 v = v_color0%s;\n", secondary);
 		}
 
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
+			WRITE(p, "  if (flag == 1) {\n");
+			if (legacyPBRFragmentAlpha) {
+				WRITE(p, "    vec4 tex_color = t;\n");
+				WRITE(p, "    if (tex_color.a > 0.15) {\n");
+				WRITE(p, "      albedo = tex_color.rgb;\n");
+				WRITE(p, "      roughness = 1.0 - (t.a - roughness);\n");
+				WRITE(p, "      PBR__2_0();\n");
+				WRITE(p, "    } else {\n");
+				WRITE(p, "      fragColor0 = vec4(tex_color.rgb, 1.0);\n");
+				WRITE(p, "    }\n");
+			} else {
+				WRITE(p, "    albedo = t.xyz;\n");
+				WRITE(p, "    PBR__2_0();\n");
+			}
+			WRITE(p, "  }\n");
+		}
+
 		if (enableFog) {
 			WRITE(p, "  float fogCoef = clamp(v_fogdepth, 0.0, 1.0);\n");
 			WRITE(p, "  v.rgb = mix(u_fogcolor, v.rgb, fogCoef);\n");
@@ -1225,6 +1252,10 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	}
 
 	WRITE(p, "}\n");
+	std::string overrideSource;
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && LoadLegacyGLSLOverride("Fragment", id.ToUint64(), &overrideSource)) {
+		memcpy(buffer, overrideSource.c_str(), overrideSource.size() + 1);
+	}
 
 	return true;
 }
