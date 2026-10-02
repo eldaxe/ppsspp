@@ -1623,9 +1623,9 @@ if(is_opengles) {
 				if (seedOK) {
 					const bool wrote = File::WriteStringToFile(true, seedBuffer, seedPath);
 					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED RESULT: 0x%lx generate=OK write=%s bytes=%zu path=%s", seedValue, wrote ? "OK" : "FAILED", std::strlen(seedBuffer), seedPath.c_str());
-					if (!wrote) ERROR_LOG(Log::G3D, "Legacy GLSL fragment SEED WRITE FAILED: %s", seedPath.c_str());
+					if (!wrote) NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED WRITE FAILED: %s", seedPath.c_str());
 				} else {
-					ERROR_LOG(Log::G3D, "Legacy GLSL fragment SEED GENERATE FAILED: 0x%lx error=%s", seedValue, seedError.c_str());
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED GENERATE FAILED: 0x%lx error=%s", seedValue, seedError.c_str());
 				}
 			}
 		}
