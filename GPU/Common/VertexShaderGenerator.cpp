@@ -1121,85 +1121,72 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	WRITE(p, "}\n");
 #ifdef __VERTEXT_GLSL_FILE__
 	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
-		WRITE(p, "\n");
-		if (highpFog) WRITE(p, "// highpFog 0\n");
-		if (highpTexcoord) WRITE(p, "// highpTexcoord 1\n");
-		if (isModeThrough) WRITE(p, "// isModeThrough 2\n");
-		if (lmode) WRITE(p, "// lmode 3\n");
-		if (hasTexcoord) WRITE(p, "// doTexture 4\n");
-		if (doTextureTransform) WRITE(p, "// doTextureTransform 5\n");
-		if (doShadeMapping) WRITE(p, "// doShadeMapping 6\n");
-		if (flatBug) WRITE(p, "// flatBug 7\n");
-		if (fsMinmaxDiscard || fsDepthClamp) WRITE(p, "// needsZWHack 8\n");
-		if (doFlatShading) WRITE(p, "// doFlatShading 9\n");
-		if (useHWTransform) WRITE(p, "// useHWTransform 10\n");
-		if (hasColor) WRITE(p, "// hasColor 11\n");
-		if (hasNormal) WRITE(p, "// hasNormal 12\n");
-		if (hasTexcoord) WRITE(p, "// hasTexcoord 13\n");
-		WRITE(p, "// enableFog 14\n");
-		if (flipNormal) WRITE(p, "// flipNormal 15\n");
-		if (enableLighting) WRITE(p, "// enableLighting 17\n");
-		if (texCoordInVec3) WRITE(p, "// texCoordInVec3 24\n");
-		if (rangeCulling) WRITE(p, "// vertexRangeCulling 25\n");
-		WRITE(p, "//flag_value: 0x%lx\n", legacyFlagValue);
+		const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
+		const std::string modernGLSLName = StringFromFormat("Vertex_%016llx.glsl", (unsigned long long)id.ToUint64());
+		const Path modernGLSLPath = customGLSLDir / modernGLSLName;
 
-		// Export both names. The modern filename is the exact 64-bit shader ID,
-		// while Vertex_0x*.glsl preserves compatibility with the 2022 shader packs.
+		// Only these two 2022 vertex entry points are legacy-special.
+		const bool isLegacySpecial =
+			legacyFlagValue == 0x2027410UL || legacyFlagValue == 0x2006410UL;
+		NOTICE_LOG(Log::G3D, "Legacy GLSL vertex ROUTE: modern=%016llx legacy=0x%lx special=%d",
+			(unsigned long long)id.ToUint64(), legacyFlagValue, isLegacySpecial);
+
 		std::string modernCode;
-		std::string legacyCode;
 		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &modernCode);
-		const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
-		NOTICE_LOG(Log::G3D, "Legacy GLSL vertex READ: modern=%s %zu bytes, legacy=%s %zu bytes", hasModernGLSL ? "yes" : "no", hasModernGLSL ? modernCode.size() : 0, hasLegacyGLSL ? "yes" : "no", hasLegacyGLSL ? legacyCode.size() : 0);
 
-		// A hand-provided 2022 legacy file is authoritative. Otherwise preserve
-		// the current modern custom shader. Only a completely new shader is
-		// exported under both names, so a generated legacy file cannot become
-		// an accidental override of a later modern custom shader.
-		std::string customCode;
-		if (hasLegacyGLSL) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex OVERRIDE: %s", legacyGLSLName.c_str());
-			customCode = legacyCode;
-			if (!hasModernGLSL) {
+		if (isLegacySpecial) {
+			const std::string legacyGLSLName = StringFromFormat("Vertex_0x%lx.glsl", legacyFlagValue);
+			const Path legacyGLSLPath = customGLSLDir / legacyGLSLName;
+			std::string legacyCode;
+			const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL READ: %s=%d %zu bytes, %s=%d %zu bytes",
+				modernGLSLName.c_str(), hasModernGLSL, hasModernGLSL ? modernCode.size() : 0,
+				legacyGLSLName.c_str(), hasLegacyGLSL, hasLegacyGLSL ? legacyCode.size() : 0);
+
+			if (hasLegacyGLSL) {
+				// A hand-authored 2022 special entry point is authoritative.
+				NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL APPLY: %s", legacyGLSLName.c_str());
+				if (legacyCode.size() < 16384) {
+					std::memcpy(buffer, legacyCode.data(), legacyCode.size());
+					buffer[legacyCode.size()] = '\0';
+				}
+			} else {
+				// Keep the generated modern shader independent; export the same freshly
+				// generated source under the special legacy name only.
 				File::CreateFullPath(customGLSLDir);
-				File::WriteStringToFile(true, customCode, modernGLSLPath);
+				const bool wroteLegacy = File::WriteStringToFile(true, buffer, legacyGLSLPath);
+				NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL EXPORT: %s write=%s bytes=%zu",
+					legacyGLSLName.c_str(), wroteLegacy ? "OK" : "FAILED", std::strlen(buffer));
 			}
 		} else if (hasModernGLSL) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex MODERN OVERRIDE: %s", modernGLSLName.c_str());
-			customCode = modernCode;
+			// All non-special shaders use only the complete modern ID.
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex MODERN APPLY: %s", modernGLSLName.c_str());
+			if (modernCode.size() < 16384) {
+				std::memcpy(buffer, modernCode.data(), modernCode.size());
+				buffer[modernCode.size()] = '\0';
+			}
 		} else {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex EXPORT: %s and %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
 			File::CreateFullPath(customGLSLDir);
-			File::WriteStringToFile(true, buffer, modernGLSLPath);
-			File::WriteStringToFile(true, buffer, legacyGLSLPath);
-		}
-		if (!customCode.empty() && customCode.size() < 16384) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex APPLY override: %zu bytes", customCode.size());
-			std::memcpy(buffer, customCode.data(), customCode.size());
-			buffer[customCode.size()] = '\0';
+			const bool wroteModern = File::WriteStringToFile(true, buffer, modernGLSLPath);
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex MODERN EXPORT: %s write=%s bytes=%zu",
+				modernGLSLName.c_str(), wroteModern ? "OK" : "FAILED", std::strlen(buffer));
 		}
 
-		// Some 2022 shader entry points are not reachable from a normal modern
-		// draw, but their legacy files are still consumed by the custom fragment
-		// shaders. Seed those files by running this same generator with the
-		// corresponding modern VShaderID. The guard prevents recursive export.
+		// Generate only the two legacy-special entry points shipped by the 2022 patch.
 		if (!generatingLegacySeed) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED PASS: 0x2027410, 0x2006410");
 			const unsigned long legacySeedValues[] = { 0x2027410UL, 0x2006410UL };
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL SEED PASS: 0x2027410, 0x2006410");
 			for (unsigned long seedValue : legacySeedValues) {
 				const Path seedPath = customGLSLDir / StringFromFormat("Vertex_0x%lx.glsl", seedValue);
 				if (File::Exists(seedPath)) {
-					NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED EXISTS: 0x%lx %s", seedValue, seedPath.c_str());
+					NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL SEED EXISTS: 0x%lx", seedValue);
 					continue;
 				}
-				NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED GENERATE: 0x%lx -> %s", seedValue, seedPath.c_str());
 
 				VShaderID seedID;
-				// Legacy bits 10/12/13/25 map to modern HW/normal/texcoord/range
-				// bits. Legacy bit 17 (lighting) maps to modern lighting bit 24.
 				seedID.SetBit(VS_BIT_USE_HW_TRANSFORM);
 				seedID.SetBit(VS_BIT_HAS_TEXCOORD);
 				seedID.SetBit(VS_BIT_VERTEX_RANGE_CULLING);
-				// 0x2027410 has legacy bit 12 (normal), while 0x2006410 does not.
 				if (seedValue == 0x2027410UL) {
 					seedID.SetBit(VS_BIT_HAS_NORMAL);
 					seedID.SetBit(VS_BIT_LIGHTING_ENABLE);
@@ -1217,14 +1204,16 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 
 				if (seedOK) {
 					const bool wrote = File::WriteStringToFile(true, seedBuffer, seedPath);
-					NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED RESULT: 0x%lx generate=OK write=%s bytes=%zu path=%s", seedValue, wrote ? "OK" : "FAILED", std::strlen(seedBuffer), seedPath.c_str());
-					if (!wrote) NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED WRITE FAILED: %s", seedPath.c_str());
+					NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL SEED RESULT: 0x%lx generate=OK write=%s bytes=%zu",
+						seedValue, wrote ? "OK" : "FAILED", std::strlen(seedBuffer));
 				} else {
-					NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED GENERATE FAILED: 0x%lx error=%s", seedValue, seedError.c_str());
+					NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL SEED GENERATE FAILED: 0x%lx error=%s",
+						seedValue, seedError.c_str());
 				}
 			}
 		}
 	}
 #endif
+
 	return true;
 }
