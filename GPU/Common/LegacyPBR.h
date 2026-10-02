@@ -1,10 +1,10 @@
 #pragma once
 
-#include <fstream>
 #include <string>
 
 #include "Common/GPU/ShaderWriter.h"
 #include "Core/Config.h"
+#include "Common/File/FileUtil.h"
 #include "Common/StringUtils.h"
 
 inline bool LegacyPBRVertexMode1(bool doTexture, bool useHWTransform, bool hasNormal, bool hasTexcoord, bool enableFog, bool enableLighting, bool vertexRangeCulling) {
@@ -58,10 +58,6 @@ inline void WriteLegacyPBRPrelude(ShaderWriter &p) {
 }
 
 inline bool LoadLegacyGLSLOverride(const std::string &stage, uint64_t shaderID, std::string *source) {
-	const std::string path = (g_Config.memStickDirectory / "PSP/SHADERS/GLSL").ToString() + "/" + stage + "_" + StringFromFormat("%016llx", (unsigned long long)shaderID) + ".glsl";
-	std::ifstream f(path);
-	if (!f.is_open())
-		return false;
-	*source = std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-	return !source->empty() && source->size() + 1 < 32768;
+	const Path path = g_Config.memStickDirectory / "PSP/SHADERS/GLSL" / (stage + "_" + StringFromFormat("%016llx", (unsigned long long)shaderID) + ".glsl");
+	return File::ReadTextFileToString(path, source) && !source->empty() && source->size() + 1 < 32768;
 }
