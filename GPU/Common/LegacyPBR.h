@@ -8,12 +8,16 @@
 #include "Common/File/FileUtil.h"
 #include "Common/StringUtils.h"
 
-inline bool LegacyPBRVertexMode1(bool doTexture, bool useHWTransform, bool hasNormal, bool hasTexcoord, bool enableFog, bool enableLighting, bool vertexRangeCulling) {
-	return doTexture && useHWTransform && hasNormal && hasTexcoord && enableFog && enableLighting && vertexRangeCulling;
+// The legacy vertex flags included _doTexture and _enableFog, but the modern
+// VShaderID does not carry either fragment-state bit. Those conditions are
+// validated by the fragment shader when it selects the legacy PBR path.
+// Here we only test state represented by VShaderID.
+inline bool LegacyPBRVertexMode1(bool useHWTransform, bool hasNormal, bool hasTexcoord, bool enableLighting, bool vertexRangeCulling) {
+	return useHWTransform && hasNormal && hasTexcoord && enableLighting && vertexRangeCulling;
 }
 
-inline bool LegacyPBRVertexMode2(bool doTexture, bool useHWTransform, bool hasTexcoord, bool enableFog, bool enableLighting, bool vertexRangeCulling) {
-	return doTexture && useHWTransform && hasTexcoord && enableFog && enableLighting && vertexRangeCulling;
+inline bool LegacyPBRVertexMode2(bool useHWTransform, bool hasTexcoord, bool enableLighting, bool vertexRangeCulling) {
+	return useHWTransform && hasTexcoord && enableLighting && vertexRangeCulling;
 }
 
 inline bool LegacyPBRFragmentBase(bool enableFragmentTestCache, bool doTexture, bool enableFog) {
