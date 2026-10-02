@@ -61,6 +61,7 @@ static const SamplerDef samplersStereo[3] = {
 
 bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint64_t *uniformMask, FragmentShaderFlags *fragmentShaderFlags, std::string *errorString) {
 	static thread_local bool generatingLegacySeed = false;
+	static thread_local unsigned long legacySeedValue = 0;
 	*uniformMask = 0;
 	*fragmentShaderFlags = (FragmentShaderFlags)0;
 	errorString->clear();
@@ -68,7 +69,8 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool useStereo = id.Bit(FS_BIT_STEREO);
 	bool highpFog = false;
 	bool highpTexcoord = false;
-	bool enableFragmentTestCache = gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE);
+	bool enableFragmentTestCache = gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) ||
+		(generatingLegacySeed && (legacySeedValue == 0x2032UL || legacySeedValue == 0x2072UL));
 
 	const bool fsMinmaxDiscard = id.Bit(FS_BIT_MINMAX_DISCARD);
 	const bool fsDepthClamp = id.Bit(FS_BIT_DEPTH_CLAMP);
@@ -1595,13 +1597,11 @@ if(is_opengles) {
 					continue;
 
 				FShaderID seedID;
-				// Exact 2022 IDs:
-				// 0x2032 = fragment-test-cache + texture + fog + texture-alpha.
-				// 0x2072 = 0x2032 + alpha-test.
-				seedID.SetBit(FS_BIT_FRAGMENT_TEST_CACHE);
+				// Express the 2022 entry points using today's ShaderID.
+				// The old fragment-test-cache field is a runtime capability and
+				// is forced only while bootstrapping these legacy seed shaders.
 				seedID.SetBit(FS_BIT_DO_TEXTURE);
 				seedID.SetBit(FS_BIT_ENABLE_FOG);
-				seedID.SetBit(FS_BIT_TEXALPHA);
 				if (seedValue == 0x2072UL)
 					seedID.SetBit(FS_BIT_ALPHA_TEST);
 
@@ -1610,8 +1610,10 @@ if(is_opengles) {
 				FragmentShaderFlags seedFlags = (FragmentShaderFlags)0;
 				std::string seedError;
 				generatingLegacySeed = true;
+				legacySeedValue = seedValue;
 				const bool seedOK = GenerateFragmentShader(seedID, seedBuffer, compat, bugs,
 					&seedUniformMask, &seedFlags, &seedError);
+				legacySeedValue = 0;
 				generatingLegacySeed = false;
 
 				if (seedOK)
