@@ -62,12 +62,30 @@ inline void WriteLegacyPBRPrelude(ShaderWriter &p) {
 	p.C("}\n");
 }
 
-inline bool LoadLegacyGLSLOverride(const std::string &stage, uint64_t shaderID, std::string *source) {
+inline Path LegacyGLSLOverridePath(const std::string &stage, uint64_t shaderID) {
 	// memStickDirectory may itself be the PSP directory on Android (e.g. /sdcard/PSP).
 	// GetSysDirectory(DIRECTORY_PSP) normalizes both cases:
 	//   /sdcard/PSP     -> /sdcard/PSP
-	//   /sdcard/PPSSPP   -> /sdcard/PPSSPP/PSP
+	//   /sdcard/PPSSPP  -> /sdcard/PPSSPP/PSP
 	const Path shaderDirectory = GetSysDirectory(DIRECTORY_PSP) / "SHADERS/GLSL";
-	const Path path = shaderDirectory / (stage + "_" + StringFromFormat("%016llx", (unsigned long long)shaderID) + ".glsl");
+	return shaderDirectory / (stage + "_" + StringFromFormat("%016llx", (unsigned long long)shaderID) + ".glsl");
+}
+
+inline bool LoadLegacyGLSLOverride(const std::string &stage, uint64_t shaderID, std::string *source) {
+	const Path path = LegacyGLSLOverridePath(stage, shaderID);
 	return File::ReadTextFileToString(path, source) && !source->empty() && source->size() + 1 < 32768;
+}
+
+inline bool SaveGeneratedLegacyGLSL(const std::string &stage, uint64_t shaderID, std::string_view source) {
+	const Path path = LegacyGLSLOverridePath(stage, shaderID);
+
+	// Never overwrite a user-provided shader. If it already exists, the caller
+	// will load and use it instead.
+	if (File::Exists(path))
+		return false;
+
+	if (!File::CreateFullPath(path.GetDirectory()))
+		return false;
+
+	return File::WriteStringToFile(true, source, path);
 }
