@@ -1590,8 +1590,13 @@ if(is_opengles) {
 					continue;
 
 				FShaderID seedID;
+				// Exact 2022 IDs:
+				// 0x2032 = fragment-test-cache + texture + fog + texture-alpha.
+				// 0x2072 = 0x2032 + alpha-test.
+				seedID.SetBit(FS_BIT_FRAGMENT_TEST_CACHE);
 				seedID.SetBit(FS_BIT_DO_TEXTURE);
 				seedID.SetBit(FS_BIT_ENABLE_FOG);
+				seedID.SetBit(FS_BIT_TEXALPHA);
 				if (seedValue == 0x2072UL)
 					seedID.SetBit(FS_BIT_ALPHA_TEST);
 
