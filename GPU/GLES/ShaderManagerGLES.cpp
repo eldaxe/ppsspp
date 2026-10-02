@@ -19,9 +19,12 @@
 #include "Common/CommonWindows.h"
 #endif
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <map>
+#include <string_view>
 
 #include "Common/Data/Convert/SmallDataConvert.h"
 #include "Common/Data/Text/I18n.h"
@@ -51,11 +54,27 @@
 
 using namespace Lin;
 
+static std::string ParseLegacyEntryPoint(const char *code) {
+	constexpr std::string_view marker = "// PPSSPP_LEGACY_ENTRY_POINT=";
+	const char *start = strstr(code, marker.data());
+	if (!start) {
+		return {};
+	}
+	start += marker.size();
+	const char *end = strchr(start, '\n');
+	std::string entry(start, end ? end : start + strlen(start));
+	while (!entry.empty() && (entry.back() == '\r' || entry.back() == ' ' || entry.back() == '\t')) {
+		entry.pop_back();
+	}
+	return entry;
+}
+
 Shader::Shader(GLRenderManager *render, const char *code, const std::string &desc, const ShaderDescGLES &params)
 	  : render_(render), useHWTransform_(params.useHWTransform), attrMask_(params.attrMask), uniformMask_(params.uniformMask) {
 	PROFILE_THIS_SCOPE("shadercomp");
 	isFragment_ = params.glShaderType == GL_FRAGMENT_SHADER;
 	source_ = code;
+	legacyEntryPoint_ = ParseLegacyEntryPoint(code);
 #ifdef SHADERLOG
 #ifdef _WIN32
 	OutputDebugStringUTF8(code);
@@ -800,34 +819,77 @@ std::string Shader::GetShaderString(DebugShaderStringType type, ShaderID id) con
 	}
 }
 
+static std::string EncodeLegacyDebugShaderID(const ShaderID &id, const std::string &entryPoint) {
+	return "legacy|" + id.ToDebugString() + "|" + entryPoint;
+}
+
+static bool DecodeLegacyDebugShaderID(const std::string &id, ShaderID *shaderId, std::string *entryPoint) {
+	constexpr std::string_view prefix = "legacy|";
+	if (id.rfind(prefix, 0) != 0) {
+		return false;
+	}
+	size_t first = id.find('|', prefix.size());
+	if (first == std::string::npos) {
+		return false;
+	}
+	size_t second = id.find('|', first + 1);
+	if (second == std::string::npos || second + 1 >= id.size()) {
+		return false;
+	}
+	shaderId->FromString(id.substr(prefix.size(), first - prefix.size()));
+	*entryPoint = id.substr(second + 1);
+	return true;
+}
+
 std::vector<std::string> ShaderManagerGLES::DebugGetShaderIDs(DebugShaderType type) {
-	std::string id;
-	std::vector<uint64_t> ids;
+	std::vector<std::pair<uint64_t, std::string>> ids;
 	switch (type) {
 	case SHADER_TYPE_VERTEX:
 		vsCache_.Iterate([&](const VShaderID &id, Shader *shader) {
-			ids.push_back(id.ToUint64());
+			std::string debugID = id.ToDebugString();
+			if (!shader->GetLegacyEntryPoint().empty()) {
+				debugID = EncodeLegacyDebugShaderID(id, shader->GetLegacyEntryPoint());
+			}
+			ids.emplace_back(id.ToUint64(), std::move(debugID));
 		});
 		break;
 	case SHADER_TYPE_FRAGMENT:
 		fsCache_.Iterate([&](const FShaderID &id, Shader *shader) {
-			ids.push_back(id.ToUint64());
+			std::string debugID = id.ToDebugString();
+			if (!shader->GetLegacyEntryPoint().empty()) {
+				debugID = EncodeLegacyDebugShaderID(id, shader->GetLegacyEntryPoint());
+			}
+			ids.emplace_back(id.ToUint64(), std::move(debugID));
 		});
 		break;
 	default:
 		break;
 	}
-	return ToSortedDebugShaderIdVec(ids);
+	std::sort(ids.begin(), ids.end(), [](const auto &a, const auto &b) {
+		return a.first < b.first;
+	});
+	std::vector<std::string> result;
+	result.reserve(ids.size());
+	for (auto &entry : ids) {
+		result.push_back(std::move(entry.second));
+	}
+	return result;
 }
 
 std::string ShaderManagerGLES::DebugGetShaderString(std::string id, DebugShaderType type, DebugShaderStringType stringType) {
 	ShaderID shaderId;
-	shaderId.FromString(id);
+	std::string legacyEntryPoint;
+	if (!DecodeLegacyDebugShaderID(id, &shaderId, &legacyEntryPoint)) {
+		shaderId.FromString(id);
+	}
 	switch (type) {
 	case SHADER_TYPE_VERTEX:
 	{
 		Shader *vs;
 		if (vsCache_.Get(VShaderID(shaderId), &vs) && vs) {
+			if (stringType == SHADER_STRING_SHORT_DESC && !legacyEntryPoint.empty()) {
+				return "Legacy " + legacyEntryPoint + " | " + vs->GetShaderString(stringType, shaderId);
+			}
 			return vs->GetShaderString(stringType, shaderId);
 		} else {
 			return "";
@@ -838,6 +900,9 @@ std::string ShaderManagerGLES::DebugGetShaderString(std::string id, DebugShaderT
 	{
 		Shader *fs;
 		if (fsCache_.Get(FShaderID(shaderId), &fs) && fs) {
+			if (stringType == SHADER_STRING_SHORT_DESC && !legacyEntryPoint.empty()) {
+				return "Legacy " + legacyEntryPoint + " | " + fs->GetShaderString(stringType, shaderId);
+			}
 			return fs->GetShaderString(stringType, shaderId);
 		} else {
 			return "";
