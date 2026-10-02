@@ -71,7 +71,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	bool texture3D = id.Bit(FS_BIT_3D_TEXTURE);
 	bool doTextureAlpha = id.Bit(FS_BIT_LEGACY_PBR_ALPHA);
-	const bool legacyPBRFragmentBase = LegacyPBRFragmentBase(enableFragmentTestCache, id.Bit(FS_BIT_DO_TEXTURE), gstate.isFogEnabled());
+	const bool legacyPBRFragmentBase = LegacyPBRFragmentBase(enableFragmentTestCache, doTexture, enableFog);
 	const bool legacyPBRFragmentAlpha = legacyPBRFragmentBase && doTextureAlpha;
 	bool arrayTexture = id.Bit(FS_BIT_SAMPLE_ARRAY_TEXTURE);
 	bool forceDepthWritesOff = id.Bit(FS_BIT_DEPTH_TEST_NEVER);
