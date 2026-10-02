@@ -16,6 +16,7 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "Common/StringUtils.h"
+#include "Common/Log.h"
 #include <bitset>
 #include <cstring>
 
@@ -235,6 +236,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	legacyFlags.set(_LEGACY_TEXCOORD_VEC3, texCoordInVec3);
 	legacyFlags.set(_LEGACY_VERTEX_RANGE_CULLING, rangeCulling);
 	const unsigned long legacyFlagValue = legacyFlags.to_ulong();
+	NOTICE_LOG(Log::G3D, "Legacy GLSL vertex: modern=%016llx legacy=0x%lx HW=%d normal=%d texcoord=%d lighting=%d through=%d rangeCull=%d", (unsigned long long)id.ToUint64(), legacyFlagValue, useHWTransform, hasNormal, hasTexcoord, enableLighting, isModeThrough, rangeCulling);
+	NOTICE_LOG(Log::G3D, "Legacy GLSL vertex flags: 0x%lx", legacyFlagValue);
 
 #ifdef __VERTEXT_GLSL_FILE__
 	// 2022 compatibility metadata probe. Kept verbatim as a disabled compatibility
@@ -1146,21 +1149,26 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &customCode);
 		std::string legacyCode;
 		const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
+		NOTICE_LOG(Log::G3D, "Legacy GLSL vertex READ: modern=%s %zu bytes, legacy=%s %zu bytes", hasModernGLSL ? "yes" : "no", hasModernGLSL ? customCode.size() : 0, hasLegacyGLSL ? "yes" : "no", hasLegacyGLSL ? legacyCode.size() : 0);
 		if (!hasModernGLSL && hasLegacyGLSL) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex OVERRIDE: %s -> %s", legacyGLSLName.c_str(), modernGLSLName.c_str());
 			// An existing 2022 override remains authoritative; mirror it to the modern name.
 			customCode = legacyCode;
 			File::CreateFullPath(customGLSLDir);
 			File::WriteStringToFile(true, customCode, modernGLSLPath);
 		} else if (hasModernGLSL && !hasLegacyGLSL) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex MIRROR: %s -> %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
 			// Keep the legacy filename available as well.
 			File::CreateFullPath(customGLSLDir);
 			File::WriteStringToFile(true, customCode, legacyGLSLPath);
 		} else if (!hasModernGLSL && !hasLegacyGLSL) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex EXPORT: %s and %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
 			File::CreateFullPath(customGLSLDir);
 			File::WriteStringToFile(true, buffer, modernGLSLPath);
 			File::WriteStringToFile(true, buffer, legacyGLSLPath);
 		}
 		if (!customCode.empty() && customCode.size() < 16384) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex APPLY override: %zu bytes", customCode.size());
 			std::memcpy(buffer, customCode.data(), customCode.size());
 			buffer[customCode.size()] = '\0';
 		}
@@ -1170,11 +1178,15 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		// shaders. Seed those files by running this same generator with the
 		// corresponding modern VShaderID. The guard prevents recursive export.
 		if (!generatingLegacySeed) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED PASS: 0x2027410, 0x2006410");
 			const unsigned long legacySeedValues[] = { 0x2027410UL, 0x2006410UL };
 			for (unsigned long seedValue : legacySeedValues) {
 				const Path seedPath = customGLSLDir / StringFromFormat("Vertex_0x%lx.glsl", seedValue);
-				if (File::Exists(seedPath))
+				if (File::Exists(seedPath)) {
+					NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED EXISTS: 0x%lx %s", seedValue, seedPath.c_str());
 					continue;
+				}
+				NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED GENERATE: 0x%lx -> %s", seedValue, seedPath.c_str());
 
 				VShaderID seedID;
 				// Legacy bits 10/12/13/25 map to modern HW/normal/texcoord/range
@@ -1198,8 +1210,13 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 					&seedAttrMask, &seedUniformMask, &seedFlags, &seedError);
 				generatingLegacySeed = false;
 
-				if (seedOK)
-					File::WriteStringToFile(true, seedBuffer, seedPath);
+				if (seedOK) {
+					const bool wrote = File::WriteStringToFile(true, seedBuffer, seedPath);
+					NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SEED RESULT: 0x%lx generate=OK write=%s bytes=%zu path=%s", seedValue, wrote ? "OK" : "FAILED", std::strlen(seedBuffer), seedPath.c_str());
+					if (!wrote) ERROR_LOG(Log::G3D, "Legacy GLSL vertex SEED WRITE FAILED: %s", seedPath.c_str());
+				} else {
+					ERROR_LOG(Log::G3D, "Legacy GLSL vertex SEED GENERATE FAILED: 0x%lx error=%s", seedValue, seedError.c_str());
+				}
 			}
 		}
 	}
