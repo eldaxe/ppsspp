@@ -42,6 +42,27 @@
 // Legacy custom-GLSL export/override support from the old patch.
 #define __VERTEXT_GLSL_FILE__
 
+static bool ComposeLegacyVertexGLSL(const std::string &generatedCode, const std::string &legacyCode, std::string *composed) {
+	const size_t generatedMain = generatedCode.find("void main(");
+	const size_t legacyMain = legacyCode.find("void main(");
+	if (generatedMain == std::string::npos || legacyMain == std::string::npos)
+		return false;
+
+	const size_t customStart = legacyCode.find("vec3 normalizeOr001(");
+	std::string legacyHelpers;
+	if (customStart != std::string::npos && customStart < legacyMain)
+		legacyHelpers = legacyCode.substr(customStart, legacyMain - customStart);
+
+	*composed = generatedCode.substr(0, generatedMain);
+	if (!legacyHelpers.empty()) {
+		composed->append("\n// Legacy custom GLSL helpers\n");
+		composed->append(legacyHelpers);
+	}
+	composed->append("\n");
+	composed->append(legacyCode.substr(legacyMain));
+	return true;
+}
+
 // Depth range and viewport
 //
 // After the multiplication with the projection matrix, we have a 4D vector in clip space.
@@ -1146,11 +1167,15 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 				legacyGLSLName.c_str(), hasLegacyGLSL, hasLegacyGLSL ? legacyCode.size() : 0);
 
 			if (hasLegacyGLSL) {
-				// A hand-authored 2022 special entry point is authoritative.
-				NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL APPLY: %s", legacyGLSLName.c_str());
-				if (legacyCode.size() < 16384) {
-					std::memcpy(buffer, legacyCode.data(), legacyCode.size());
-					buffer[legacyCode.size()] = '\0';
+				std::string composedCode;
+				const bool composed = ComposeLegacyVertexGLSL(std::string(buffer), legacyCode, &composedCode);
+				NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL COMPOSE: %s compose=%s generated=%zu legacy=%zu final=%zu",
+					legacyGLSLName.c_str(), composed ? "OK" : "FAILED", std::strlen(buffer), legacyCode.size(), composedCode.size());
+				if (composed && composedCode.size() < 16384) {
+					std::memcpy(buffer, composedCode.data(), composedCode.size());
+					buffer[composedCode.size()] = '\0';
+				} else {
+					NOTICE_LOG(Log::G3D, "Legacy GLSL vertex SPECIAL COMPOSE REJECTED: %s", legacyGLSLName.c_str());
 				}
 			} else {
 				// Keep the generated modern shader independent; export the same freshly
