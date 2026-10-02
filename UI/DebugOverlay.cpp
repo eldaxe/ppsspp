@@ -76,7 +76,6 @@ static void DrawLogView(UIContext *ctx, const Bounds &bounds) {
 
 	ctx->SetFontStyle(style);
 
-	const float contentWidth = std::max(0.0f, bounds.w - marginX * 2.0f);
 	const float contentHeight = std::max(0.0f, bounds.h - marginY * 2.0f);
 	const int maxLines = (int)(contentHeight / lineHeight);
 	const int lineCount = std::min(ring.GetCount(), maxLines);
