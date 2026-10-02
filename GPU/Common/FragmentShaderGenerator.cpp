@@ -1558,11 +1558,17 @@ if(is_opengles) {
 
 		// Legacy filename remains authoritative when present, matching the 2022
 		// replacement behavior. The modern filename is a parallel export.
-		std::string customCode;
+		std::string modernCode;
 		std::string legacyCode;
+		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &modernCode);
 		const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
-		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &customCode);
-		NOTICE_LOG(Log::G3D, "Legacy GLSL fragment READ: modern=%s %zu bytes, legacy=%s %zu bytes", hasModernGLSL ? "yes" : "no", hasModernGLSL ? customCode.size() : 0, hasLegacyGLSL ? "yes" : "no", hasLegacyGLSL ? legacyCode.size() : 0);
+		NOTICE_LOG(Log::G3D, "Legacy GLSL fragment READ: modern=%s %zu bytes, legacy=%s %zu bytes", hasModernGLSL ? "yes" : "no", hasModernGLSL ? modernCode.size() : 0, hasLegacyGLSL ? "yes" : "no", hasLegacyGLSL ? legacyCode.size() : 0);
+
+		// A hand-provided 2022 legacy file is authoritative. Otherwise preserve
+		// the current modern custom shader. Only a completely new shader is
+		// exported under both names, so a generated legacy file cannot become
+		// an accidental override of a later modern custom shader.
+		std::string customCode;
 		if (hasLegacyGLSL) {
 			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment OVERRIDE: %s", legacyGLSLName.c_str());
 			customCode = legacyCode;
@@ -1571,9 +1577,8 @@ if(is_opengles) {
 				File::WriteStringToFile(true, customCode, modernGLSLPath);
 			}
 		} else if (hasModernGLSL) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment MIRROR: %s -> %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
-			File::CreateFullPath(customGLSLDir);
-			File::WriteStringToFile(true, customCode, legacyGLSLPath);
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment MODERN OVERRIDE: %s", modernGLSLName.c_str());
+			customCode = modernCode;
 		} else {
 			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment EXPORT: %s and %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
 			File::CreateFullPath(customGLSLDir);
