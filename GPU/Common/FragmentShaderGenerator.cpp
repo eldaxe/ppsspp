@@ -530,6 +530,156 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "%s %s highp vec4 v_8;\n", shading, compat.varying_fs);
 #endif
 
+               WRITE(p, "vec3 albedo;\n");
+                WRITE(p, "float metallic = 0.5;\n");
+                WRITE(p, "float roughness = 0.15;\n");
+                WRITE(p, "vec3 lightPositions[2];\n");
+                WRITE(p, "vec3 lightColors[2];\n");
+                WRITE(p, "vec3 camPos = vec3(0.0, 0.0, 50.0);\n");
+                WRITE(p, "const float PI = 3.14159265359;\n");
+                WRITE(p, "float lightness(float R, float G, float B) {\n");
+                 WRITE(p, "return pow(pow(R / 1.0, 2.2) + pow(G / 0.666666, 2.2) +pow(B / 1.666666, 2.2),1.0 / 2.2) *0.547373;\n");
+                WRITE(p, "}\n");
+
+
+
+
+               // ----------------------------------------------------------------------------
+WRITE(p, "float DistributionGGX(vec3 N, vec3 H, float roughness) {\n");
+        WRITE(p, "float a = roughness * roughness;\n");
+        WRITE(p, "float a2 = a * a;\n");
+        WRITE(p, "float NdotH = max(dot(N, H), 0.0);\n");
+        WRITE(p, "float NdotH2 = NdotH * NdotH;\n");
+
+        WRITE(p, "float nom = a2;\n");
+        WRITE(p, "float denom = (NdotH2 * (a2 - 1.0) + 1.0);\n");
+        WRITE(p, "denom = PI * denom * denom;\n");
+
+            WRITE(p, "return nom / denom;\n");
+        WRITE(p, "}\n");
+// ----------------------------------------------------------------------------
+        WRITE(p, "float GeometrySchlickGGX(float NdotV, float roughness) {\n");
+        WRITE(p, "float r = (roughness + 1.0);\n");
+        WRITE(p, "float k = (r * r) / 8.0;\n");
+
+        WRITE(p, "float nom = NdotV;\n");
+        WRITE(p, "float denom = NdotV * (1.0 - k) + k;\n");
+
+            WRITE(p, "return nom / denom;\n");
+        WRITE(p, "}\n");
+// ----------------------------------------------------------------------------
+        WRITE(p, "float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {\n");
+        WRITE(p, "float NdotV = max(dot(N, V), 0.0);\n");
+        WRITE(p, "float NdotL = max(dot(N, L), 0.0);\n");
+        WRITE(p, "float ggx2 = GeometrySchlickGGX(NdotV, roughness);\n");
+        WRITE(p, "float ggx1 = GeometrySchlickGGX(NdotL, roughness);\n");
+
+            WRITE(p, "return ggx1 * ggx2;\n");
+        WRITE(p, "}\n");
+// ----------------------------------------------------------------------------
+        WRITE(p, "vec3 fresnelSchlick(float cosTheta, vec3 F0) {\n");
+            WRITE(p, "return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n");
+            WRITE(p, "}\n");
+// ----------------------------------------------------------------------------
+
+ WRITE(p, "void PBR__2_0() {\n");
+
+   WRITE(p, "vec3 N = normalize(v_1.xyz);\n");
+   WRITE(p, "vec3 fogcolor = vec3(mix(vec3(dot(u_fogcolor, vec3(0.299, 0.587, 0.114))),u_fogcolor, 0.5));\n");
+
+   WRITE(p, "float l = lightness(u_fogcolor.r , u_fogcolor.g ,u_fogcolor.b );\n");
+
+   WRITE(p, "vec3 ld;\n");
+   WRITE(p, "float ll;\n");
+   WRITE(p, "float min;\n");
+   WRITE(p, "fogcolor += 0.75 - l;\n");
+ WRITE(p, "vec3 fogcolor_inverse = 1.0 - fogcolor;\n");
+
+ WRITE(p, "vec3 diff1 ,diff2;\n");
+  //黑雾
+   WRITE(p, "if (l < 0.15) {\n");
+     WRITE(p, "min = 0.2;\n");
+     WRITE(p, "ll = 1.5;\n");
+     WRITE(p, "ld = normalize(v_5.xyz);\n");
+     WRITE(p, "ld.z = abs(ld.z) * 7.0;\n");
+
+     WRITE(p, "diff1 =( fogcolor)*ll;\n");
+     WRITE(p, "diff2 = fogcolor_inverse*ll;\n");
+
+
+     WRITE(p, "lightPositions[0].z = v_3.z* 1000.0;\n");
+     WRITE(p, "lightPositions[1].z = v_4.z * 1000.0;\n");
+
+     WRITE(p, "lightColors[0] = fogcolor_inverse;\n");
+     WRITE(p, "lightColors[1] =  fogcolor;\n");
+
+
+
+   WRITE(p, "} else {\n");
+
+     WRITE(p, "min = 0.1;\n");
+     WRITE(p, "ll = 2.0;\n");
+     WRITE(p, "ld = normalize(v_4.xyz);\n");
+     WRITE(p, "ld.z = abs(ld.z) * 5.0;\n");
+    WRITE(p, " diff1 =fogcolor_inverse;\n");
+     WRITE(p, "diff2 =  fogcolor *ll;\n");
+
+    WRITE(p, " lightPositions[0].z =v_4.z* 1000.0;\n");
+    WRITE(p, " lightPositions[1].z = v_3.z * 1000.0;\n");
+
+    WRITE(p, " lightColors[0] = fogcolor;\n");
+    WRITE(p, " lightColors[1] = fogcolor_inverse;\n");
+   WRITE(p, "}\n");
+   WRITE(p, "lightPositions[0].x = N.x * 1000.;\n");
+   WRITE(p, "lightPositions[0].y = N.y * 2000.;\n");
+
+  WRITE(p, "lightPositions[1].x = N.x * 3500.;\n");
+   WRITE(p, "lightPositions[1].y = N.y * 5000.;\n");
+
+
+   WRITE(p, "vec3 lightDir = normalize(ld * 1000.0 - v_2.xyz);\n");
+   WRITE(p, "float diff = max(dot(N, lightDir), 0.0);\n");
+
+   WRITE(p, "if (diff < min)diff = min;\n");
+
+  WRITE(p, " vec3 diffColor = mix(diff1,diff2 , diff);\n");
+
+   WRITE(p, "if (gl_FragCoord.w > 0.015) {\n");
+     WRITE(p, "vec3 V = normalize(camPos - v_2.xyz);\n");
+     WRITE(p, "vec3 F0 = vec3(0.04);\n");
+     WRITE(p, "F0 = mix(F0, albedo, metallic);\n");
+     WRITE(p, "vec3 Lo = vec3(0.0);\n");
+     WRITE(p, "for (int i = 0; i < 2; ++i) {\n");
+       WRITE(p, "vec3 L = normalize(lightPositions[i] - v_2.xyz);\n");
+      WRITE(p, " vec3 H = normalize(V + L);\n");
+       WRITE(p, "float NDF = DistributionGGX(N, H, roughness);\n");
+       WRITE(p, "float G = GeometrySmith(N, V, L, roughness);\n");
+       WRITE(p, "vec3 F = fresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);\n");
+       WRITE(p, "vec3 numerator = NDF * G * F;\n");
+       WRITE(p, "float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) +  0.0001;\n");
+       WRITE(p, "vec3 specular = numerator / denominator;\n");
+
+       WRITE(p, "vec3 kS = F;\n");
+       WRITE(p, "vec3 kD = vec3(1.0) - kS;\n");
+       WRITE(p, "kD *= 1.0 - metallic;\n");
+       WRITE(p, "float NdotL = max(dot(N, L), 0.0);\n");
+       WRITE(p, "Lo += (kD * albedo / PI + specular) * lightColors[i] * NdotL;\n");
+     WRITE(p, "}\n");
+
+     WRITE(p, "vec3 ambient = albedo ;\n");
+     WRITE(p, "vec3 color = Lo + ambient;\n");
+
+    WRITE(p, " color = color / (color + vec3(1.0));\n");
+     WRITE(p, "color *= diffColor;\n");
+
+
+     WRITE(p, "fragColor0 = vec4(color, 1.0);\n");
+
+
+   WRITE(p, "} else {\n");
+     WRITE(p, "fragColor0 = vec4(albedo * diffColor *  0.75, 1.0);\n");
+   WRITE(p, "}\n");
+ WRITE(p, "}\n");
 
 		}
 
