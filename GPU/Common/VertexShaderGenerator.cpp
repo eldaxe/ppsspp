@@ -1109,7 +1109,9 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "  v[2] = vec3(u_view[2].xyz);\n");
 			WRITE(p, "  v_1 = vec4(worldnormal.xyz, 1.0);\n");
 			WRITE(p, "  v_2 = vec4(worldpos, 1.0);\n");
-			WRITE(p, "  v_5 = u_world[0];\n");
+			WRITE(p, "  v_3 = vec4(normalize(vec3(0.0, 10000.0, 2000.0) * v), 1.0);\n");
+			WRITE(p, "  v_4 = vec4(normalize(vec3(0.0, 10000.0, -2000.0) * v), 1.0);\n");
+			WRITE(p, "  v_5 = vec4(v_3.x, -v_3.y, v_3.z, 1.0);\n");
 			WRITE(p, "  v_6 = u_world[1];\n");
 			WRITE(p, "  v_7 = u_world[2];\n");
 		} else if (legacyFlagValue == 0x2006410) {
