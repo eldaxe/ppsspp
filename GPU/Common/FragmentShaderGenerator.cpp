@@ -515,7 +515,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 		// 2022 custom GLSL interface. The 2022 PBR helper implementation is emitted into generated GLSL,
 		// but is not invoked automatically; custom GLSL may call it.
-		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && (legacyFlagValue == 0x32 || legacyFlagValue == 0x2032)) {
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && (legacyFlagValue == 0x32 || legacyFlagValue == 0x72 || legacyFlagValue == 0x2032 || legacyFlagValue == 0x2072)) {
 			WRITE(p, "//****** my_varying_fs *********\n");
 			WRITE(p, "precision highp float;\n");
 			WRITE(p, "%s %s lowp flat int flag;\n", shading, compat.varying_fs);
