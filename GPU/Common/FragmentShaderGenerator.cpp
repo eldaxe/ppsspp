@@ -41,6 +41,27 @@
 
 #define WRITE(p, ...) p.F(__VA_ARGS__)
 #define __FRAGMENT_GLSL_FILE__
+
+static bool ComposeLegacyFragmentGLSL(const std::string &generatedCode, const std::string &legacyCode, std::string *composed) {
+	const size_t generatedMain = generatedCode.find("void main(");
+	const size_t legacyMain = legacyCode.find("void main(");
+	if (generatedMain == std::string::npos || legacyMain == std::string::npos)
+		return false;
+
+	const size_t customStart = legacyCode.find("vec2 SphereMap(");
+	std::string legacyHelpers;
+	if (customStart != std::string::npos && customStart < legacyMain)
+		legacyHelpers = legacyCode.substr(customStart, legacyMain - customStart);
+
+	*composed = generatedCode.substr(0, generatedMain);
+	if (!legacyHelpers.empty()) {
+		composed->append("\n// Legacy custom GLSL helpers\n");
+		composed->append(legacyHelpers);
+	}
+	composed->append("\n");
+	composed->append(legacyCode.substr(legacyMain));
+	return true;
+}
 #define NORMAL_TEXTURE
 //#define EXTEND_TEXTURE
 
@@ -1517,10 +1538,15 @@ WRITE(p, "float DistributionGGX(vec3 N, vec3 H, float roughness) {\n");
 				legacyGLSLName.c_str(), hasLegacyGLSL, hasLegacyGLSL ? legacyCode.size() : 0);
 
 			if (hasLegacyGLSL) {
-				NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL APPLY: %s", legacyGLSLName.c_str());
-				if (legacyCode.size() < 16384) {
-					std::memcpy(buffer, legacyCode.data(), legacyCode.size());
-					buffer[legacyCode.size()] = '\0';
+				std::string composedCode;
+				const bool composed = ComposeLegacyFragmentGLSL(std::string(buffer), legacyCode, &composedCode);
+				NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL COMPOSE: %s compose=%s generated=%zu legacy=%zu final=%zu",
+					legacyGLSLName.c_str(), composed ? "OK" : "FAILED", std::strlen(buffer), legacyCode.size(), composedCode.size());
+				if (composed && composedCode.size() < 16384) {
+					std::memcpy(buffer, composedCode.data(), composedCode.size());
+					buffer[composedCode.size()] = '\0';
+				} else {
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL COMPOSE REJECTED: %s", legacyGLSLName.c_str());
 				}
 			} else {
 				File::CreateFullPath(customGLSLDir);
