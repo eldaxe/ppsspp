@@ -718,6 +718,10 @@ LinkedShader *ShaderManagerGLES::ApplyFragmentShader(VShaderID VSID, Shader *vs,
 		lastShader_ = nullptr;
 		gstate_c.Clean(DIRTY_FRAGMENTSHADER_STATE);
 		ComputeFragmentShaderID(&FSID, pipelineState, draw_->GetBugs(), clipInfoFlags);
+		// Legacy PBR alpha is an OpenGL/GLES-only shader variant.
+		if (gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) && gstate.isTextureMapEnabled() && gstate.isFogEnabled() && gstate.isTextureAlphaUsed()) {
+			FSID.SetBit(FS_BIT_LEGACY_PBR_ALPHA);
+		}
 	} else {
 		FSID = lastFSID_;
 	}
