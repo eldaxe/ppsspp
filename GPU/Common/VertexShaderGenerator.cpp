@@ -1180,11 +1180,13 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 				// Legacy bits 10/12/13/25 map to modern HW/normal/texcoord/range
 				// bits. Legacy bit 17 (lighting) maps to modern lighting bit 24.
 				seedID.SetBit(VS_BIT_USE_HW_TRANSFORM);
-				seedID.SetBit(VS_BIT_HAS_NORMAL);
 				seedID.SetBit(VS_BIT_HAS_TEXCOORD);
 				seedID.SetBit(VS_BIT_VERTEX_RANGE_CULLING);
-				if (seedValue == 0x2027410UL)
+				// 0x2027410 has legacy bit 12 (normal), while 0x2006410 does not.
+				if (seedValue == 0x2027410UL) {
+					seedID.SetBit(VS_BIT_HAS_NORMAL);
 					seedID.SetBit(VS_BIT_LIGHTING_ENABLE);
+				}
 
 				char seedBuffer[16384] = {};
 				uint32_t seedAttrMask = 0;
