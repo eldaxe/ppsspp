@@ -1145,29 +1145,34 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 
 		// Export both names. The modern filename is the exact 64-bit shader ID,
 		// while Vertex_0x*.glsl preserves compatibility with the 2022 shader packs.
-		std::string customCode;
-		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &customCode);
+		std::string modernCode;
 		std::string legacyCode;
+		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &modernCode);
 		const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
-		NOTICE_LOG(Log::G3D, "Legacy GLSL vertex READ: modern=%s %zu bytes, legacy=%s %zu bytes", hasModernGLSL ? "yes" : "no", hasModernGLSL ? customCode.size() : 0, hasLegacyGLSL ? "yes" : "no", hasLegacyGLSL ? legacyCode.size() : 0);
-		if (!hasModernGLSL && hasLegacyGLSL) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex OVERRIDE: %s -> %s", legacyGLSLName.c_str(), modernGLSLName.c_str());
-			// An existing 2022 override remains authoritative; mirror it to the modern name.
+		NOTICE_LOG(Log::G3D, "Legacy GLSL vertex READ: modern=%s %zu bytes, legacy=%s %zu bytes", hasModernGLSL ? "yes" : "no", hasModernGLSL ? modernCode.size() : 0, hasLegacyGLSL ? "yes" : "no", hasLegacyGLSL ? legacyCode.size() : 0);
+
+		// A hand-provided 2022 legacy file is authoritative. Otherwise preserve
+		// the current modern custom shader. Only a completely new shader is
+		// exported under both names, so a generated legacy file cannot become
+		// an accidental override of a later modern custom shader.
+		std::string customCode;
+		if (hasLegacyGLSL) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex OVERRIDE: %s", legacyGLSLName.c_str());
 			customCode = legacyCode;
-			File::CreateFullPath(customGLSLDir);
-			File::WriteStringToFile(true, customCode, modernGLSLPath);
-		} else if (hasModernGLSL && !hasLegacyGLSL) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex MIRROR: %s -> %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
-			// Keep the legacy filename available as well.
-			File::CreateFullPath(customGLSLDir);
-			File::WriteStringToFile(true, customCode, legacyGLSLPath);
-		} else if (!hasModernGLSL && !hasLegacyGLSL) {
+			if (!hasModernGLSL) {
+				File::CreateFullPath(customGLSLDir);
+				File::WriteStringToFile(true, customCode, modernGLSLPath);
+			}
+		} else if (hasModernGLSL) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex MODERN OVERRIDE: %s", modernGLSLName.c_str());
+			customCode = modernCode;
+		} else {
 			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex EXPORT: %s and %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
 			File::CreateFullPath(customGLSLDir);
 			File::WriteStringToFile(true, buffer, modernGLSLPath);
 			File::WriteStringToFile(true, buffer, legacyGLSLPath);
 		}
-		if (!customCode.empty() && customCode.size() < 16384) {
+		if (!customCode.empty() && customCode.size() < 16384) {		if (!customCode.empty() && customCode.size() < 16384) {
 			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex APPLY override: %zu bytes", customCode.size());
 			std::memcpy(buffer, customCode.data(), customCode.size());
 			buffer[customCode.size()] = '\0';
