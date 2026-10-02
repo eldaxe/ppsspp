@@ -87,7 +87,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	const bool clipNearPlane = gstate_c.Use(GPU_USE_CLIP_DISTANCE) && useHWTransform;
 	const bool clipMinMax = gstate_c.Use(GPU_USE_CLIP_DISTANCE) && !isModeThrough;  // If clip planes are available, we want to use them for min/max. We skip the min/max culling in software transform (not yet implemented).
 
-	const bool rangeCulling = id.Bit(VS_BIT_VERTEX_RANGE_CULLING);
+	const bool rangeCulling = id.Bit(VS_BIT_VERTEX_RANGE_CULLING) && !isModeThrough;
 	const bool depthCullEnable = gstate_c.Use(GPU_USE_CULL_DISTANCE) && !isModeThrough && rangeCulling && useHWTransform;  // Range culling is gated on draw type, we don't want to do this culling for splines apparently.
 
 	std::vector<const char*> extensions;
@@ -1106,9 +1106,9 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "  v[2] = vec3(u_view[2].xyz);\n");
 			WRITE(p, "  v_1 = vec4(worldnormal.xyz, 1.0);\n");
 			WRITE(p, "  v_2 = vec4(worldpos, 1.0);\n");
-			WRITE(p, "  v_3 = vec4(normalize(vec3(0.0, 10000.0, 2000.0) * v), 1.0);\n");
-			WRITE(p, "  v_4 = vec4(normalize(vec3(0.0, 10000.0, -2000.0) * v), 1.0);\n");
-			WRITE(p, "  v_5 = vec4(v_3.x, -v_3.y, v_3.z, 1.0);\n");
+			WRITE(p, "  v_5 = u_world[0];\n");
+			WRITE(p, "  v_6 = u_world[1];\n");
+			WRITE(p, "  v_7 = u_world[2];\n");
 		} else if (legacyFlagValue == 0x2006410) {
 			WRITE(p, " flag = 2;\n");
 		} else {
