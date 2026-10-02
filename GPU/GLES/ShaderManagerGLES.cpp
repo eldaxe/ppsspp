@@ -61,9 +61,9 @@ static std::string ParseLegacyEntryPoint(const char *code) {
 		return {};
 	}
 	start += marker.size();
-	const char *end = strchr(start, '\\n');
+	const char *end = strchr(start, '\n');
 	std::string entry(start, end ? end : start + strlen(start));
-	while (!entry.empty() && (entry.back() == '\\r' || entry.back() == ' ' || entry.back() == '\\t')) {
+	while (!entry.empty() && (entry.back() == '\r' || entry.back() == ' ' || entry.back() == '\t')) {
 		entry.pop_back();
 	}
 	return entry;
