@@ -331,6 +331,10 @@ void ComputeFragmentShaderID(FShaderID *id_out, const ComputedPipelineState &pip
 		bool doFlatShading = gstate.getShadeMode() == GE_SHADE_FLAT;
 
 		bool enableTexAlpha = gstate.isTextureAlphaUsed();
+		const bool legacyPBRBase = gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) && gstate.isTextureMapEnabled() && enableFog;
+		if (legacyPBRBase && enableTexAlpha) {
+			id.SetBit(FS_BIT_LEGACY_PBR_ALPHA);
+		}
 
 		ShaderDepalMode shaderDepalMode = gstate_c.shaderDepalMode;
 		GEBufferFormat shaderDepalFormat = {};
