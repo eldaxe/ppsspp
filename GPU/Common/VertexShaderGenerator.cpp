@@ -16,6 +16,11 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include "Common/StringUtils.h"
+#include <bitset>
+#include <cstring>
+
+#include "Common/File/FileUtil.h"
+#include "Core/Util/PathUtil.h"
 #include "Common/GPU/OpenGL/GLFeatures.h"
 #include "Common/GPU/ShaderWriter.h"
 #include "Common/GPU/thin3d.h"
@@ -26,11 +31,15 @@
 #include "GPU/Common/ShaderId.h"
 #include "GPU/Common/ShaderUniforms.h"
 #include "GPU/Common/VertexShaderGenerator.h"
+
 #include "GPU/Vulkan/DrawEngineVulkan.h"
 
 #undef WRITE
 
 #define WRITE(p, ...) p.F(__VA_ARGS__)
+
+// Legacy custom-GLSL export/override support from the old patch.
+#define __VERTEXT_GLSL_FILE__
 
 // Depth range and viewport
 //
@@ -64,6 +73,7 @@
 // is a bit of a rare configuration, although quite common on mobile.
 
 bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint32_t *attrMask, uint64_t *uniformMask, VertexShaderFlags *vertexShaderFlags, std::string *errorString) {
+	static thread_local bool generatingLegacySeed = false;
 	*attrMask = 0;
 	*uniformMask = 0;
 	*vertexShaderFlags = (VertexShaderFlags)0;
@@ -77,7 +87,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	const bool clipNearPlane = gstate_c.Use(GPU_USE_CLIP_DISTANCE) && useHWTransform;
 	const bool clipMinMax = gstate_c.Use(GPU_USE_CLIP_DISTANCE) && !isModeThrough;  // If clip planes are available, we want to use them for min/max. We skip the min/max culling in software transform (not yet implemented).
 
-	const bool rangeCulling = id.Bit(VS_BIT_VERTEX_RANGE_CULLING);
+	const bool rangeCulling = id.Bit(VS_BIT_VERTEX_RANGE_CULLING) && !isModeThrough;
 	const bool depthCullEnable = gstate_c.Use(GPU_USE_CULL_DISTANCE) && !isModeThrough && rangeCulling && useHWTransform;  // Range culling is gated on draw type, we don't want to do this culling for splines apparently.
 
 	std::vector<const char*> extensions;
@@ -162,6 +172,112 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	}
 
 	bool texCoordInVec3 = false;
+
+	// Keep the historical Vertex_0x*.glsl IDs stable.
+	// Removed bone/tessellation fields stay at their old bit positions as zero.
+	enum LegacyVertexFlag {
+		_LEGACY_HIGHP_FOG = 0,
+		_LEGACY_HIGHP_TEXCOORD,
+		_LEGACY_MODE_THROUGH,
+		_LEGACY_LMODE,
+		_LEGACY_DO_TEXTURE,
+		_LEGACY_TEXTURE_TRANSFORM,
+		_LEGACY_SHADE_MAPPING,
+		_LEGACY_FLAT_BUG,
+		_LEGACY_ZW_HACK,
+		_LEGACY_FLAT_SHADING,
+		_LEGACY_HW_TRANSFORM,
+		_LEGACY_HAS_COLOR,
+		_LEGACY_HAS_NORMAL,
+		_LEGACY_HAS_TEXCOORD,
+		_LEGACY_ENABLE_FOG,
+		_LEGACY_FLIP_NORMAL,
+		_LEGACY_ENABLE_BONES,
+		_LEGACY_ENABLE_LIGHTING,
+		_LEGACY_BEZIER,
+		_LEGACY_SPLINE,
+		_LEGACY_COLOR_TESS,
+		_LEGACY_TEXCOORD_TESS,
+		_LEGACY_NORMAL_TESS,
+		_LEGACY_FLIP_NORMAL_TESS,
+		_LEGACY_TEXCOORD_VEC3,
+		_LEGACY_VERTEX_RANGE_CULLING,
+	};
+
+	std::bitset<26> legacyFlags;
+	legacyFlags.set(_LEGACY_HIGHP_FOG, highpFog);
+	legacyFlags.set(_LEGACY_HIGHP_TEXCOORD, highpTexcoord);
+	legacyFlags.set(_LEGACY_MODE_THROUGH, isModeThrough);
+	legacyFlags.set(_LEGACY_LMODE, lmode);
+	// Modern VertexShaderGenerator no longer has a separate doTexture bit.
+	// hasTexcoord preserves the old ID for the existing custom shader cases.
+	legacyFlags.set(_LEGACY_DO_TEXTURE, hasTexcoord);
+	legacyFlags.set(_LEGACY_TEXTURE_TRANSFORM, doTextureTransform);
+	legacyFlags.set(_LEGACY_SHADE_MAPPING, doShadeMapping);
+	legacyFlags.set(_LEGACY_FLAT_BUG, flatBug);
+	legacyFlags.set(_LEGACY_ZW_HACK, fsMinmaxDiscard || fsDepthClamp);
+	legacyFlags.set(_LEGACY_FLAT_SHADING, doFlatShading);
+	legacyFlags.set(_LEGACY_HW_TRANSFORM, useHWTransform);
+	legacyFlags.set(_LEGACY_HAS_COLOR, hasColor);
+	legacyFlags.set(_LEGACY_HAS_NORMAL, hasNormal);
+	legacyFlags.set(_LEGACY_HAS_TEXCOORD, hasTexcoord);
+	// Modern PPSSPP always forwards fog depth; preserve the historical bit.
+	legacyFlags.set(_LEGACY_ENABLE_FOG, true);
+	legacyFlags.set(_LEGACY_FLIP_NORMAL, flipNormal);
+	legacyFlags.set(_LEGACY_ENABLE_BONES, false);       // removed
+	legacyFlags.set(_LEGACY_ENABLE_LIGHTING, enableLighting);
+	legacyFlags.set(_LEGACY_BEZIER, false);              // removed
+	legacyFlags.set(_LEGACY_SPLINE, false);              // removed
+	legacyFlags.set(_LEGACY_COLOR_TESS, false);         // removed
+	legacyFlags.set(_LEGACY_TEXCOORD_TESS, false);      // removed
+	legacyFlags.set(_LEGACY_NORMAL_TESS, false);        // removed
+	legacyFlags.set(_LEGACY_FLIP_NORMAL_TESS, false);   // removed
+	legacyFlags.set(_LEGACY_TEXCOORD_VEC3, texCoordInVec3);
+	legacyFlags.set(_LEGACY_VERTEX_RANGE_CULLING, rangeCulling);
+	const unsigned long legacyFlagValue = legacyFlags.to_ulong();
+
+#ifdef __VERTEXT_GLSL_FILE__
+	// 2022 compatibility metadata probe. Kept verbatim as a disabled compatibility
+	// block because the original patch shipped this mechanism, even though modern
+	// PPSSPP does not consume the JSON file.
+	/*
+	std::string json_path = customGLSLDir / (legacyGLSLName + ".varying.json");
+	std::ifstream vs_out_json_ifs(json_path);
+	char* json_code = nullptr;
+	int file_size = 0;
+	bool ParseOK = false;
+	if (vs_out_json_ifs.is_open()) {
+		vs_out_json_ifs.seekg(0, vs_out_json_ifs.end);
+		file_size = vs_out_json_ifs.tellg();
+		vs_out_json_ifs.seekg(0, vs_out_json_ifs.beg);
+		json_code = new char[file_size];
+		memset(json_code, 0x00, file_size);
+		vs_out_json_ifs.read(json_code, file_size);
+		delete [] json_code;
+		vs_out_json_ifs.close();
+	} else {
+		std::ofstream json_gen(json_path);
+		if (json_gen.is_open())
+			json_gen.close();
+	}
+
+	rapidjson::Document d;
+	if (json_code) {
+		if (!d.Parse(json_code).HasParseError()) {
+			if (d.IsObject()) ParseOK = true;
+		}
+	}
+	*/
+
+	const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
+	// New exports use the complete 64-bit VShaderID. The old 26-bit projection
+	// is retained only as a compatibility fallback for existing 2022 files.
+	const std::string modernGLSLName = StringFromFormat("Vertex_%016llx.glsl", (unsigned long long)id.ToUint64());
+	const Path modernGLSLPath = customGLSLDir / modernGLSLName;
+	const std::string legacyGLSLName = StringFromFormat("Vertex_0x%lx.glsl", legacyFlagValue);
+	const Path legacyGLSLPath = customGLSLDir / legacyGLSLName;
+#endif
+
 
 	const char *minZClipPlaneSuffix = "[0]";
 	const char *maxZClipPlaneSuffix = "[1]";
@@ -420,6 +536,23 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 
 		if (fsMinmaxDiscard || fsDepthClamp) {
 			WRITE(p, "%s highp vec2 v_zw;\n", compat.varying_vs);
+		}
+
+		// 2022 custom GLSL interface. The flag/vertex assignment block from
+		// the 2022 interface assignment is emitted here so custom GLSL can use it.
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+			WRITE(p, "//****** my_varying_vs *********\n");
+			WRITE(p, "%s lowp flat int flag;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_1;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_2;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_3;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_4;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_5;\n", compat.varying_vs);
+#ifdef __VERTEXT_GLSL_FILE__
+			WRITE(p, "%s highp vec4 v_6;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_7;\n", compat.varying_vs);
+			WRITE(p, "%s highp vec4 v_8;\n", compat.varying_vs);
+#endif
 		}
 	}
 
@@ -964,6 +1097,121 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	if (compat.shaderLanguage == HLSL_D3D11) {
 		WRITE(p, "  return Out;\n");
 	}
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		if (legacyFlagValue == 0x2027410) {
+			WRITE(p, " flag = 1;\n");
+			WRITE(p, "  mat3 v;\n");
+			WRITE(p, "  v[0] = vec3(u_view[0].xyz);\n");
+			WRITE(p, "  v[1] = vec3(u_view[1].xyz);\n");
+			WRITE(p, "  v[2] = vec3(u_view[2].xyz);\n");
+			WRITE(p, "  v_1 = vec4(worldnormal.xyz, 1.0);\n");
+			WRITE(p, "  v_2 = vec4(worldpos, 1.0);\n");
+			WRITE(p, "  v_5 = u_world[0];\n");
+			WRITE(p, "  v_6 = u_world[1];\n");
+			WRITE(p, "  v_7 = u_world[2];\n");
+		} else if (legacyFlagValue == 0x2006410) {
+			WRITE(p, " flag = 2;\n");
+		} else {
+			WRITE(p, " flag = 0;\n");
+		}
+	}
 	WRITE(p, "}\n");
+#ifdef __VERTEXT_GLSL_FILE__
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		WRITE(p, "\n");
+		if (highpFog) WRITE(p, "// highpFog 0\n");
+		if (highpTexcoord) WRITE(p, "// highpTexcoord 1\n");
+		if (isModeThrough) WRITE(p, "// isModeThrough 2\n");
+		if (lmode) WRITE(p, "// lmode 3\n");
+		if (hasTexcoord) WRITE(p, "// doTexture 4\n");
+		if (doTextureTransform) WRITE(p, "// doTextureTransform 5\n");
+		if (doShadeMapping) WRITE(p, "// doShadeMapping 6\n");
+		if (flatBug) WRITE(p, "// flatBug 7\n");
+		if (fsMinmaxDiscard || fsDepthClamp) WRITE(p, "// needsZWHack 8\n");
+		if (doFlatShading) WRITE(p, "// doFlatShading 9\n");
+		if (useHWTransform) WRITE(p, "// useHWTransform 10\n");
+		if (hasColor) WRITE(p, "// hasColor 11\n");
+		if (hasNormal) WRITE(p, "// hasNormal 12\n");
+		if (hasTexcoord) WRITE(p, "// hasTexcoord 13\n");
+		WRITE(p, "// enableFog 14\n");
+		if (flipNormal) WRITE(p, "// flipNormal 15\n");
+		if (enableLighting) WRITE(p, "// enableLighting 17\n");
+		if (texCoordInVec3) WRITE(p, "// texCoordInVec3 24\n");
+		if (rangeCulling) WRITE(p, "// vertexRangeCulling 25\n");
+		WRITE(p, "//flag_value: 0x%lx\n", legacyFlagValue);
+
+		// Export both names. The modern filename is the exact 64-bit shader ID,
+		// while Vertex_0x*.glsl preserves compatibility with the 2022 shader packs.
+		std::string customCode;
+		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &customCode);
+		std::string legacyCode;
+		const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
+		if (!hasModernGLSL && hasLegacyGLSL) {
+			// An existing 2022 override remains authoritative; mirror it to the modern name.
+			customCode = legacyCode;
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, customCode, modernGLSLPath);
+		} else if (hasModernGLSL && !hasLegacyGLSL) {
+			// Keep the legacy filename available as well.
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, customCode, legacyGLSLPath);
+		} else if (!hasModernGLSL && !hasLegacyGLSL) {
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, buffer, modernGLSLPath);
+			File::WriteStringToFile(true, buffer, legacyGLSLPath);
+		}
+		constexpr const char *legacyEntryMarker = "// PPSSPP_LEGACY_ENTRY_POINT=";
+		const std::string legacyEntryLine = std::string(legacyEntryMarker) + legacyGLSLName + "\n";
+		if (customCode.empty()) {
+			customCode = legacyEntryLine + std::string(buffer);
+		} else if (customCode.rfind(legacyEntryMarker, 0) != 0) {
+			customCode.insert(0, legacyEntryLine);
+		}
+		File::CreateFullPath(customGLSLDir);
+		File::WriteStringToFile(true, customCode, modernGLSLPath);
+		File::WriteStringToFile(true, customCode, legacyGLSLPath);
+
+		if (!customCode.empty() && customCode.size() < 16384) {
+			std::memcpy(buffer, customCode.data(), customCode.size());
+			buffer[customCode.size()] = '\0';
+		}
+
+		// Some 2022 shader entry points are not reachable from a normal modern
+		// draw, but their legacy files are still consumed by the custom fragment
+		// shaders. Seed those files by running this same generator with the
+		// corresponding modern VShaderID. The guard prevents recursive export.
+		if (!generatingLegacySeed) {
+			const unsigned long legacySeedValues[] = { 0x2027410UL, 0x2006410UL };
+			for (unsigned long seedValue : legacySeedValues) {
+				const Path seedPath = customGLSLDir / StringFromFormat("Vertex_0x%lx.glsl", seedValue);
+				if (File::Exists(seedPath))
+					continue;
+
+				VShaderID seedID;
+				// Legacy bits 10/12/13/25 map to modern HW/normal/texcoord/range
+				// bits. Legacy bit 17 (lighting) maps to modern lighting bit 24.
+				seedID.SetBit(VS_BIT_USE_HW_TRANSFORM);
+				seedID.SetBit(VS_BIT_HAS_NORMAL);
+				seedID.SetBit(VS_BIT_HAS_TEXCOORD);
+				seedID.SetBit(VS_BIT_VERTEX_RANGE_CULLING);
+				if (seedValue == 0x2027410UL)
+					seedID.SetBit(VS_BIT_LIGHTING_ENABLE);
+
+				char seedBuffer[16384] = {};
+				uint32_t seedAttrMask = 0;
+				uint64_t seedUniformMask = 0;
+				VertexShaderFlags seedFlags = (VertexShaderFlags)0;
+				std::string seedError;
+				generatingLegacySeed = true;
+				const bool seedOK = GenerateVertexShader(seedID, seedBuffer, compat, bugs,
+					&seedAttrMask, &seedUniformMask, &seedFlags, &seedError);
+				generatingLegacySeed = false;
+
+				if (seedOK)
+					File::WriteStringToFile(true, seedBuffer, seedPath);
+			}
+		}
+	}
+#endif
 	return true;
 }
