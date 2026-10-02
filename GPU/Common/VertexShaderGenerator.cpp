@@ -73,6 +73,7 @@
 // is a bit of a rare configuration, although quite common on mobile.
 
 bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint32_t *attrMask, uint64_t *uniformMask, VertexShaderFlags *vertexShaderFlags, std::string *errorString) {
+	static thread_local bool generatingLegacySeed = false;
 	*attrMask = 0;
 	*uniformMask = 0;
 	*vertexShaderFlags = (VertexShaderFlags)0;
@@ -1162,6 +1163,42 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		if (!customCode.empty() && customCode.size() < 16384) {
 			std::memcpy(buffer, customCode.data(), customCode.size());
 			buffer[customCode.size()] = '\0';
+		}
+
+		// Some 2022 shader entry points are not reachable from a normal modern
+		// draw, but their legacy files are still consumed by the custom fragment
+		// shaders. Seed those files by running this same generator with the
+		// corresponding modern VShaderID. The guard prevents recursive export.
+		if (!generatingLegacySeed) {
+			const unsigned long legacySeedValues[] = { 0x2027410UL, 0x2006410UL };
+			for (unsigned long seedValue : legacySeedValues) {
+				const Path seedPath = customGLSLDir / StringFromFormat("Vertex_0x%lx.glsl", seedValue);
+				if (File::Exists(seedPath))
+					continue;
+
+				VShaderID seedID;
+				// Legacy bits 10/12/13/25 map to modern HW/normal/texcoord/range
+				// bits. Legacy bit 17 (lighting) maps to modern lighting bit 24.
+				seedID.SetBit(VS_BIT_USE_HW_TRANSFORM);
+				seedID.SetBit(VS_BIT_HAS_NORMAL);
+				seedID.SetBit(VS_BIT_HAS_TEXCOORD);
+				seedID.SetBit(VS_BIT_VERTEX_RANGE_CULLING);
+				if (seedValue == 0x2027410UL)
+					seedID.SetBit(VS_BIT_LIGHTING_ENABLE);
+
+				char seedBuffer[16384] = {};
+				uint32_t seedAttrMask = 0;
+				uint64_t seedUniformMask = 0;
+				VertexShaderFlags seedFlags = (VertexShaderFlags)0;
+				std::string seedError;
+				generatingLegacySeed = true;
+				const bool seedOK = GenerateVertexShader(seedID, seedBuffer, compat, bugs,
+					&seedAttrMask, &seedUniformMask, &seedFlags, &seedError);
+				generatingLegacySeed = false;
+
+				if (seedOK)
+					File::WriteStringToFile(true, seedBuffer, seedPath);
+			}
 		}
 	}
 #endif
