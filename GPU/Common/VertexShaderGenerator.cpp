@@ -26,6 +26,7 @@
 #include "GPU/Common/ShaderId.h"
 #include "GPU/Common/ShaderUniforms.h"
 #include "GPU/Common/VertexShaderGenerator.h"
+#include "GPU/Common/LegacyPBR.h"
 #include "GPU/Vulkan/DrawEngineVulkan.h"
 
 #undef WRITE
@@ -164,6 +165,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	}
 
 	bool texCoordInVec3 = false;
+	const bool legacyPBRVertexMode1 = LegacyPBRVertexMode1(doTexture, useHWTransform, hasNormal, hasTexcoord, enableFog, enableLighting, rangeCulling);
+	const bool legacyPBRVertexMode2 = LegacyPBRVertexMode2(doTexture, useHWTransform, hasTexcoord, enableFog, enableLighting, rangeCulling);
 
 	const char *minZClipPlaneSuffix = "[0]";
 	const char *maxZClipPlaneSuffix = "[1]";
@@ -423,6 +426,10 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		if (fsMinmaxDiscard || fsDepthClamp) {
 			WRITE(p, "%s highp vec2 v_zw;\n", compat.varying_vs);
 		}
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+			WRITE(p, "//****** my_varying_vs *********\n");
+			WriteLegacyPBRVaryingVS(p, compat.varying_vs);
+		}
 	}
 
 	if (useHWTransform) {
@@ -507,6 +514,22 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			WRITE(p, "  mediump vec3 worldnormal = normalizeOr001(mul(vec4(%snormal, 0.0), u_world).xyz);\n", flipNormal ? "-" : "");
 		} else {
 			WRITE(p, "  mediump vec3 worldnormal = normalizeOr001(mul(vec4(0.0, 0.0, %s1.0, 0.0), u_world).xyz);\n", flipNormal ? "-" : "");
+		}
+		if (legacyPBRVertexMode1) {
+			WRITE(p, "  flag = 1;\n");
+			WRITE(p, "  mat3 v;\n");
+			WRITE(p, "  v[0] = vec3(u_view[0].xyz);\n");
+			WRITE(p, "  v[1] = vec3(u_view[1].xyz);\n");
+			WRITE(p, "  v[2] = vec3(u_view[2].xyz);\n");
+			WRITE(p, "  v_1 = vec4(worldnormal.xyz, 1.0);\n");
+			WRITE(p, "  v_2 = vec4(worldpos, 1.0);\n");
+			WRITE(p, "  v_3 = vec4(normalize(vec3(0.,10000.,2000.) * v), 1.0);\n");
+			WRITE(p, "  v_4 = vec4(normalize(vec3(0.,10000.,-2000.) * v), 1.0);\n");
+			WRITE(p, "  v_5 = vec4(v_3.x, -v_3.y, v_3.z, 1.0);\n");
+		} else if (legacyPBRVertexMode2) {
+			WRITE(p, "  flag = 2;\n");
+		} else {
+			WRITE(p, "  flag = 0;\n");
 		}
 		if (enableLighting || doShadeMapping) {
 			// The viewer is at infinity along view space +z: in world space, the view matrix's third column.
@@ -1001,5 +1024,9 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		WRITE(p, "  return Out;\n");
 	}
 	WRITE(p, "}\n");
+	std::string overrideSource;
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && LoadLegacyGLSLOverride("Vertex", id.ToUint64(), &overrideSource)) {
+		memcpy(buffer, overrideSource.c_str(), overrideSource.size() + 1);
+	}
 	return true;
 }
