@@ -165,8 +165,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	}
 
 	bool texCoordInVec3 = false;
-	const bool legacyPBRVertexMode1 = LegacyPBRVertexMode1(doTexture, useHWTransform, hasNormal, hasTexcoord, enableFog, enableLighting, rangeCulling);
-	const bool legacyPBRVertexMode2 = LegacyPBRVertexMode2(doTexture, useHWTransform, hasTexcoord, enableFog, enableLighting, rangeCulling);
+	const bool legacyPBRVertexMode1 = LegacyPBRVertexMode1(useHWTransform, hasNormal, hasTexcoord, enableLighting, rangeCulling);
+	const bool legacyPBRVertexMode2 = LegacyPBRVertexMode2(useHWTransform, hasTexcoord, enableLighting, rangeCulling);
 
 	const char *minZClipPlaneSuffix = "[0]";
 	const char *maxZClipPlaneSuffix = "[1]";
