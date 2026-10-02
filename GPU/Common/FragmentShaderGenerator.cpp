@@ -1554,30 +1554,25 @@ if(is_opengles) {
 		if (hasPackUnorm4x8) WRITE(p, "// hasPackUnorm4x8 28\n");
 		WRITE(p, "//flag_value = 0x%lx\n", legacyFlagValue);
 
-		// Identity-safe lookup: exact modern ID first, then legacy 2022 aliases.
-		// This prevents two different modern FShaderIDs from sharing an export name.
+		// Legacy filename remains authoritative when present, matching the 2022
+		// replacement behavior. The modern filename is a parallel export.
 		std::string customCode;
-		if (!File::ReadTextFileToString(modernGLSLPath, &customCode)) {
-			Path legacyPath = legacyGLSLPath;
-			if (!File::Exists(legacyPath)) {
-				const unsigned long removedMask = (1UL << 11) | (1UL << 13) | (1UL << 17) | (1UL << 18);
-				for (unsigned int combo = 1; combo < 16 && !File::Exists(legacyPath); ++combo) {
-					unsigned long aliasID = legacyFlagValue;
-					unsigned int bit = 0;
-					for (unsigned int b = 0; b < 32; ++b) {
-						if (removedMask & (1UL << b)) {
-							if (combo & (1U << bit))
-								aliasID |= (1UL << b);
-							++bit;
-						}
-					}
-					legacyPath = customGLSLDir / StringFromFormat("Fragment_0x%lx.glsl", aliasID);
-				}
-			}
-			if (!File::ReadTextFileToString(legacyPath, &customCode)) {
+		std::string legacyCode;
+		const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
+		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &customCode);
+		if (hasLegacyGLSL) {
+			customCode = legacyCode;
+			if (!hasModernGLSL) {
 				File::CreateFullPath(customGLSLDir);
-				File::WriteStringToFile(true, buffer, modernGLSLPath);
+				File::WriteStringToFile(true, customCode, modernGLSLPath);
 			}
+		} else if (hasModernGLSL) {
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, customCode, legacyGLSLPath);
+		} else {
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, buffer, modernGLSLPath);
+			File::WriteStringToFile(true, buffer, legacyGLSLPath);
 		}
 		if (!customCode.empty() && customCode.size() < 16384) {
 			std::memcpy(buffer, customCode.data(), customCode.size());
