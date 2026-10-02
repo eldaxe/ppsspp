@@ -1025,8 +1025,13 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	}
 	WRITE(p, "}\n");
 	std::string overrideSource;
-	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && LoadLegacyGLSLOverride("Vertex", id.ToUint64(), &overrideSource)) {
-		memcpy(buffer, overrideSource.c_str(), overrideSource.size() + 1);
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		if (LoadLegacyGLSLOverride("Vertex", id.ToUint64(), &overrideSource)) {
+			memcpy(buffer, overrideSource.c_str(), overrideSource.size() + 1);
+		} else {
+			SaveGeneratedLegacyGLSL("Vertex", id.ToUint64(), std::string(buffer));
+		}
+	}
 	}
 	return true;
 }
