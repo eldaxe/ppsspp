@@ -684,7 +684,7 @@ WRITE(p, "float DistributionGGX(vec3 N, vec3 H, float roughness) {\n");
        WRITE(p, "vec3 kD = vec3(1.0) - kS;\n");
        WRITE(p, "kD *= 1.0 - metallic;\n");
        WRITE(p, "float NdotL = max(dot(N, L), 0.0);\n");
-       WRITE(p, "Lo += (kD * albedo / PI + specular) * lightColors[i] * NdotL;\n");
+       WRITE(p, "Lo += (kD * albedo / PI + specular) * lightColors[i] * NdotL * 0.70;\n");
      WRITE(p, "}\n");
 
      WRITE(p, "vec3 ambient = albedo ;\n");
