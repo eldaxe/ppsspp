@@ -879,7 +879,9 @@ std::vector<std::string> ShaderManagerGLES::DebugGetShaderIDs(DebugShaderType ty
 std::string ShaderManagerGLES::DebugGetShaderString(std::string id, DebugShaderType type, DebugShaderStringType stringType) {
 	ShaderID shaderId;
 	std::string legacyEntryPoint;
-	DecodeLegacyDebugShaderID(id, &shaderId, &legacyEntryPoint);
+	if (!DecodeLegacyDebugShaderID(id, &shaderId, &legacyEntryPoint)) {
+		shaderId.FromString(id);
+	}
 	switch (type) {
 	case SHADER_TYPE_VERTEX:
 	{
