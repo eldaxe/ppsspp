@@ -1139,13 +1139,25 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		if (rangeCulling) WRITE(p, "// vertexRangeCulling 25\n");
 		WRITE(p, "//flag_value: 0x%lx\n", legacyFlagValue);
 
-		// Identity-safe lookup: exact modern ID first, then the legacy 2022 filename.
+		// Export both names. The modern filename is the exact 64-bit shader ID,
+		// while Vertex_0x*.glsl preserves compatibility with the 2022 shader packs.
 		std::string customCode;
-		if (!File::ReadTextFileToString(modernGLSLPath, &customCode)) {
-			if (!File::ReadTextFileToString(legacyGLSLPath, &customCode)) {
-				File::CreateFullPath(customGLSLDir);
-				File::WriteStringToFile(true, buffer, modernGLSLPath);
-			}
+		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &customCode);
+		std::string legacyCode;
+		const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
+		if (!hasModernGLSL && hasLegacyGLSL) {
+			// An existing 2022 override remains authoritative; mirror it to the modern name.
+			customCode = legacyCode;
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, customCode, modernGLSLPath);
+		} else if (hasModernGLSL && !hasLegacyGLSL) {
+			// Keep the legacy filename available as well.
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, customCode, legacyGLSLPath);
+		} else if (!hasModernGLSL && !hasLegacyGLSL) {
+			File::CreateFullPath(customGLSLDir);
+			File::WriteStringToFile(true, buffer, modernGLSLPath);
+			File::WriteStringToFile(true, buffer, legacyGLSLPath);
 		}
 		if (!customCode.empty() && customCode.size() < 16384) {
 			std::memcpy(buffer, customCode.data(), customCode.size());
