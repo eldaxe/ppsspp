@@ -60,6 +60,7 @@ static const SamplerDef samplersStereo[3] = {
 };
 
 bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint64_t *uniformMask, FragmentShaderFlags *fragmentShaderFlags, std::string *errorString) {
+	static thread_local bool generatingLegacySeed = false;
 	*uniformMask = 0;
 	*fragmentShaderFlags = (FragmentShaderFlags)0;
 	errorString->clear();
@@ -1581,6 +1582,36 @@ if(is_opengles) {
 		if (!customCode.empty() && customCode.size() < 16384) {
 			std::memcpy(buffer, customCode.data(), customCode.size());
 			buffer[customCode.size()] = '\0';
+		}
+
+		// Seed the two fragment entry points shipped by the 2022 GLSL pack.
+		// They are compatibility entry points, not necessarily states emitted by
+		// today's pipeline. Existing files always take precedence.
+		if (!generatingLegacySeed) {
+			const unsigned long legacySeedValues[] = { 0x2032UL, 0x2072UL };
+			for (unsigned long seedValue : legacySeedValues) {
+				const Path seedPath = customGLSLDir / StringFromFormat("Fragment_0x%lx.glsl", seedValue);
+				if (File::Exists(seedPath))
+					continue;
+
+				FShaderID seedID;
+				seedID.SetBit(FS_BIT_DO_TEXTURE);
+				seedID.SetBit(FS_BIT_ENABLE_FOG);
+				if (seedValue == 0x2072UL)
+					seedID.SetBit(FS_BIT_ALPHA_TEST);
+
+				char seedBuffer[16384] = {};
+				uint64_t seedUniformMask = 0;
+				FragmentShaderFlags seedFlags = (FragmentShaderFlags)0;
+				std::string seedError;
+				generatingLegacySeed = true;
+				const bool seedOK = GenerateFragmentShader(seedID, seedBuffer, compat, bugs,
+					&seedUniformMask, &seedFlags, &seedError);
+				generatingLegacySeed = false;
+
+				if (seedOK)
+					File::WriteStringToFile(true, seedBuffer, seedPath);
+			}
 		}
 	}
 #endif
