@@ -22,7 +22,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <map>
+#include <string_view>
 
 #include "Common/Data/Convert/SmallDataConvert.h"
 #include "Common/Data/Text/I18n.h"
