@@ -1562,21 +1562,26 @@ if(is_opengles) {
 		std::string legacyCode;
 		const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
 		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &customCode);
+		NOTICE_LOG(Log::G3D, "Legacy GLSL fragment READ: modern=%s %zu bytes, legacy=%s %zu bytes", hasModernGLSL ? "yes" : "no", hasModernGLSL ? customCode.size() : 0, hasLegacyGLSL ? "yes" : "no", hasLegacyGLSL ? legacyCode.size() : 0);
 		if (hasLegacyGLSL) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment OVERRIDE: %s", legacyGLSLName.c_str());
 			customCode = legacyCode;
 			if (!hasModernGLSL) {
 				File::CreateFullPath(customGLSLDir);
 				File::WriteStringToFile(true, customCode, modernGLSLPath);
 			}
 		} else if (hasModernGLSL) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment MIRROR: %s -> %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
 			File::CreateFullPath(customGLSLDir);
 			File::WriteStringToFile(true, customCode, legacyGLSLPath);
 		} else {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment EXPORT: %s and %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
 			File::CreateFullPath(customGLSLDir);
 			File::WriteStringToFile(true, buffer, modernGLSLPath);
 			File::WriteStringToFile(true, buffer, legacyGLSLPath);
 		}
 		if (!customCode.empty() && customCode.size() < 16384) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment APPLY override: %zu bytes", customCode.size());
 			std::memcpy(buffer, customCode.data(), customCode.size());
 			buffer[customCode.size()] = '\0';
 		}
@@ -1585,11 +1590,15 @@ if(is_opengles) {
 		// They are compatibility entry points, not necessarily states emitted by
 		// today's pipeline. Existing files always take precedence.
 		if (!generatingLegacySeed) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED PASS: 0x2032, 0x2072");
 			const unsigned long legacySeedValues[] = { 0x2032UL, 0x2072UL };
 			for (unsigned long seedValue : legacySeedValues) {
 				const Path seedPath = customGLSLDir / StringFromFormat("Fragment_0x%lx.glsl", seedValue);
-				if (File::Exists(seedPath))
+				if (File::Exists(seedPath)) {
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED EXISTS: 0x%lx %s", seedValue, seedPath.c_str());
 					continue;
+				}
+				NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED GENERATE: 0x%lx -> %s", seedValue, seedPath.c_str());
 
 				FShaderID seedID;
 				// Express the 2022 entry points using today's ShaderID.
@@ -1611,8 +1620,13 @@ if(is_opengles) {
 				legacySeedValue = 0;
 				generatingLegacySeed = false;
 
-				if (seedOK)
-					File::WriteStringToFile(true, seedBuffer, seedPath);
+				if (seedOK) {
+					const bool wrote = File::WriteStringToFile(true, seedBuffer, seedPath);
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED RESULT: 0x%lx generate=OK write=%s bytes=%zu path=%s", seedValue, wrote ? "OK" : "FAILED", std::strlen(seedBuffer), seedPath.c_str());
+					if (!wrote) ERROR_LOG(Log::G3D, "Legacy GLSL fragment SEED WRITE FAILED: %s", seedPath.c_str());
+				} else {
+					ERROR_LOG(Log::G3D, "Legacy GLSL fragment SEED GENERATE FAILED: 0x%lx error=%s", seedValue, seedError.c_str());
+				}
 			}
 		}
 	}
