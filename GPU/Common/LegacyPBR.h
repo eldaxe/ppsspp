@@ -58,7 +58,7 @@ inline void WriteLegacyPBRPrelude(ShaderWriter &p) {
 }
 
 inline bool LoadLegacyGLSLOverride(const std::string &stage, uint64_t shaderID, std::string *source) {
-	const std::string path = g_Config.memStickDirectory + "PSP/SHADERS/GLSL/" + stage + "_" + StringFromFormat("%016llx", (unsigned long long)shaderID) + ".glsl";
+	const std::string path = (g_Config.memStickDirectory / "PSP/SHADERS/GLSL").ToString() + "/" + stage + "_" + StringFromFormat("%016llx", (unsigned long long)shaderID) + ".glsl";
 	std::ifstream f(path);
 	if (!f.is_open())
 		return false;
