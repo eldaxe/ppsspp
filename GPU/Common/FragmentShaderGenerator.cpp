@@ -16,7 +16,9 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <cstdio>
+#include <cstring>
 #include <sstream>
+#include <bitset>
 
 #include "Common/Log.h"
 #include "Common/StringUtils.h"
@@ -34,7 +36,37 @@
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
 
+#include "Common/File/FileUtil.h"
+#include "Core/Util/PathUtil.h"
+
 #define WRITE(p, ...) p.F(__VA_ARGS__)
+#define __FRAGMENT_GLSL_FILE__
+
+static bool ComposeLegacyFragmentGLSL(const std::string &generatedCode, const std::string &legacyCode, std::string *composed) {
+	const size_t generatedMain = generatedCode.find("void main(");
+	const size_t legacyMain = legacyCode.find("void main(");
+	if (generatedMain == std::string::npos || legacyMain == std::string::npos)
+		return false;
+
+	const size_t customStart = legacyCode.find("vec2 SphereMap(");
+	std::string legacyHelpers;
+	if (customStart != std::string::npos && customStart < legacyMain)
+		legacyHelpers = legacyCode.substr(customStart, legacyMain - customStart);
+
+	*composed = generatedCode.substr(0, generatedMain);
+	if (!legacyHelpers.empty()) {
+		composed->append("\n// Legacy custom GLSL helpers\n");
+		composed->append(legacyHelpers);
+	}
+	composed->append("\n");
+	composed->append(legacyCode.substr(legacyMain));
+	return true;
+}
+#define NORMAL_TEXTURE
+//#define EXTEND_TEXTURE
+
+// Legacy custom-GLSL export/override support from the old patch.
+#define __FRAGMENT_GLSL_FILE__
 
 static const SamplerDef samplersMono[3] = {
 	{ 0, "tex" },
@@ -49,6 +81,8 @@ static const SamplerDef samplersStereo[3] = {
 };
 
 bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint64_t *uniformMask, FragmentShaderFlags *fragmentShaderFlags, std::string *errorString) {
+	static thread_local bool generatingLegacySeed = false;
+	static thread_local unsigned long legacySeedValue = 0;
 	*uniformMask = 0;
 	*fragmentShaderFlags = (FragmentShaderFlags)0;
 	errorString->clear();
@@ -56,7 +90,8 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool useStereo = id.Bit(FS_BIT_STEREO);
 	bool highpFog = false;
 	bool highpTexcoord = false;
-	bool enableFragmentTestCache = gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE);
+	bool enableFragmentTestCache = gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) ||
+		(generatingLegacySeed && (legacySeedValue == 0x32UL || legacySeedValue == 0x2032UL));
 
 	const bool fsMinmaxDiscard = id.Bit(FS_BIT_MINMAX_DISCARD);
 	const bool fsDepthClamp = id.Bit(FS_BIT_DEPTH_CLAMP);
@@ -184,6 +219,88 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	bool needFragCoord = readFramebufferTex || gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT);
 	bool writeDepth = (gstate_c.Use(GPU_ROUND_FRAGMENT_DEPTH_TO_16BIT) || fsDepthClamp) && !forceDepthWritesOff;
+
+	// Keep the historical Fragment_0x*.glsl IDs stable.
+	// Removed legacy fields stay at their old bit positions as zero.
+	enum LegacyFragmentFlag {
+		_LEGACY_HIGHP_FOG = 0,
+		_LEGACY_FRAGMENT_TEST_CACHE,
+		_LEGACY_TEXTURE_3D,
+		_LEGACY_LMODE,
+		_LEGACY_DO_TEXTURE,
+		_LEGACY_ENABLE_FOG,
+		_LEGACY_ALPHA_TEST,
+		_LEGACY_ALPHA_AGAINST_ZERO,
+		_LEGACY_TEST_FORCE_TO_ZERO,
+		_LEGACY_COLOR_TEST,
+		_LEGACY_COLOR_AGAINST_ZERO,
+		_LEGACY_COLOR_DOUBLE,
+		_LEGACY_TEXTURE_PROJECTION,
+		_LEGACY_TEXTURE_ALPHA,
+		_LEGACY_FLAT_BUG,
+		_LEGACY_FLAT_SHADING,
+		_LEGACY_SHADER_DEPAL,
+		_LEGACY_SMOOTHED_DEPAL,
+		_LEGACY_BGRA_TEXTURE,
+		_LEGACY_COLOR_WRITE_MASK,
+		_LEGACY_SHADER_TEX_CLAMP,
+		_LEGACY_BLUE_TO_ALPHA,
+		_LEGACY_CLEAR_MODE,
+		_LEGACY_DISCARD_STENCIL_WORKAROUND,
+		_LEGACY_READ_FRAMEBUFFER,
+		_LEGACY_READ_FRAMEBUFFER_TEX,
+		_LEGACY_FRAG_COORD,
+		_LEGACY_WRITE_DEPTH,
+	};
+
+	std::bitset<28> legacyFlags;
+	legacyFlags.set(_LEGACY_HIGHP_FOG, highpFog);
+	legacyFlags.set(_LEGACY_FRAGMENT_TEST_CACHE, enableFragmentTestCache);
+	legacyFlags.set(_LEGACY_TEXTURE_3D, texture3D);
+	legacyFlags.set(_LEGACY_LMODE, lmode);
+	legacyFlags.set(_LEGACY_DO_TEXTURE, doTexture);
+	legacyFlags.set(_LEGACY_ENABLE_FOG, enableFog);
+	legacyFlags.set(_LEGACY_ALPHA_TEST, enableAlphaTest);
+	legacyFlags.set(_LEGACY_ALPHA_AGAINST_ZERO, alphaTestAgainstZero);
+	legacyFlags.set(_LEGACY_TEST_FORCE_TO_ZERO, testForceToZero);
+	legacyFlags.set(_LEGACY_COLOR_TEST, enableColorTest);
+	legacyFlags.set(_LEGACY_COLOR_AGAINST_ZERO, colorTestAgainstZero);
+	legacyFlags.set(_LEGACY_COLOR_DOUBLE, false);       // removed
+	legacyFlags.set(_LEGACY_TEXTURE_PROJECTION, doTextureProjection);
+	legacyFlags.set(_LEGACY_TEXTURE_ALPHA, false);      // removed
+	legacyFlags.set(_LEGACY_FLAT_BUG, flatBug);
+	legacyFlags.set(_LEGACY_FLAT_SHADING, doFlatShading);
+	legacyFlags.set(_LEGACY_SHADER_DEPAL, shaderDepalMode != ShaderDepalMode::OFF);
+	legacyFlags.set(_LEGACY_SMOOTHED_DEPAL, false);     // removed
+	legacyFlags.set(_LEGACY_BGRA_TEXTURE, false);       // removed
+	legacyFlags.set(_LEGACY_COLOR_WRITE_MASK, colorWriteMask);
+	legacyFlags.set(_LEGACY_SHADER_TEX_CLAMP, needShaderTexClamp);
+	legacyFlags.set(_LEGACY_BLUE_TO_ALPHA, blueToAlpha);
+	legacyFlags.set(_LEGACY_CLEAR_MODE, isModeClear);
+	legacyFlags.set(_LEGACY_DISCARD_STENCIL_WORKAROUND, useDiscardStencilBugWorkaround);
+	legacyFlags.set(_LEGACY_READ_FRAMEBUFFER, needFramebufferRead);
+	legacyFlags.set(_LEGACY_READ_FRAMEBUFFER_TEX, readFramebufferTex);
+	legacyFlags.set(_LEGACY_FRAG_COORD, needFragCoord);
+	legacyFlags.set(_LEGACY_WRITE_DEPTH, writeDepth);
+	const unsigned long legacyFlagValue = generatingLegacySeed ? legacySeedValue : legacyFlags.to_ulong();
+	// These legacy fields no longer exist in the modern ShaderID. They remain
+	// explicit zero-valued compatibility fields so the 2022 metadata contract
+	// stays readable without changing modern shader generation.
+	const bool enableColorDoubling = false;
+	const bool doTextureAlpha = false;
+	const bool smoothedDepal = false;
+	const bool bgraTexture = false;
+
+#ifdef __FRAGMENT_GLSL_FILE__
+	const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
+	// New exports use the complete 64-bit FShaderID. The old 28-bit projection
+	// is retained only as a compatibility fallback for existing 2022 files.
+	const std::string modernGLSLName = StringFromFormat("Fragment_%016llx.glsl", (unsigned long long)id.ToUint64());
+	const Path modernGLSLPath = customGLSLDir / modernGLSLName;
+	const std::string legacyGLSLName = StringFromFormat("Fragment_0x%lx.glsl", legacyFlagValue);
+	const Path legacyGLSLPath = customGLSLDir / legacyGLSLName;
+#endif
+
 
 	// TODO: We could have a separate mechanism to support more ops using the shader blending mechanism,
 // on hardware that can do proper bit math in fragment shaders.
@@ -415,6 +532,176 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 		if (fsMinmaxDiscard || fsDepthClamp) {
 			WRITE(p, "%s highp vec2 v_zw;\n", compat.varying_fs);
+		}
+
+		// 2022 custom GLSL interface. The 2022 PBR helper implementation is emitted into generated GLSL,
+		// but is not invoked automatically; custom GLSL may call it.
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && (legacyFlagValue == 0x32 || legacyFlagValue == 0x2032)) {
+			WRITE(p, "//****** my_varying_fs *********\n");
+			WRITE(p, "precision highp float;\n");
+			WRITE(p, "%s %s lowp flat int flag;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_1;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_2;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_3;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_4;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_5;\n", shading, compat.varying_fs);
+#ifdef __FRAGMENT_GLSL_FILE__
+			WRITE(p, "%s %s highp vec4 v_6;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_7;\n", shading, compat.varying_fs);
+			WRITE(p, "%s %s highp vec4 v_8;\n", shading, compat.varying_fs);
+#endif
+
+               WRITE(p, "vec3 albedo;\n");
+                WRITE(p, "float metallic = 0.5;\n");
+                WRITE(p, "float roughness = 0.15;\n");
+                WRITE(p, "vec3 lightPositions[2];\n");
+                WRITE(p, "vec3 lightColors[2];\n");
+                WRITE(p, "vec3 camPos = vec3(0.0, 0.0, 50.0);\n");
+                WRITE(p, "const float PI = 3.14159265359;\n");
+                WRITE(p, "float lightness(float R, float G, float B) {\n");
+                 WRITE(p, "return pow(pow(R / 1.0, 2.2) + pow(G / 0.666666, 2.2) +pow(B / 1.666666, 2.2),1.0 / 2.2) *0.547373;\n");
+                WRITE(p, "}\n");
+
+
+
+
+               // ----------------------------------------------------------------------------
+WRITE(p, "float DistributionGGX(vec3 N, vec3 H, float roughness) {\n");
+        WRITE(p, "float a = roughness * roughness;\n");
+        WRITE(p, "float a2 = a * a;\n");
+        WRITE(p, "float NdotH = max(dot(N, H), 0.0);\n");
+        WRITE(p, "float NdotH2 = NdotH * NdotH;\n");
+
+        WRITE(p, "float nom = a2;\n");
+        WRITE(p, "float denom = (NdotH2 * (a2 - 1.0) + 1.0);\n");
+        WRITE(p, "denom = PI * denom * denom;\n");
+
+            WRITE(p, "return nom / denom;\n");
+        WRITE(p, "}\n");
+// ----------------------------------------------------------------------------
+        WRITE(p, "float GeometrySchlickGGX(float NdotV, float roughness) {\n");
+        WRITE(p, "float r = (roughness + 1.0);\n");
+        WRITE(p, "float k = (r * r) / 8.0;\n");
+
+        WRITE(p, "float nom = NdotV;\n");
+        WRITE(p, "float denom = NdotV * (1.0 - k) + k;\n");
+
+            WRITE(p, "return nom / denom;\n");
+        WRITE(p, "}\n");
+// ----------------------------------------------------------------------------
+        WRITE(p, "float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {\n");
+        WRITE(p, "float NdotV = max(dot(N, V), 0.0);\n");
+        WRITE(p, "float NdotL = max(dot(N, L), 0.0);\n");
+        WRITE(p, "float ggx2 = GeometrySchlickGGX(NdotV, roughness);\n");
+        WRITE(p, "float ggx1 = GeometrySchlickGGX(NdotL, roughness);\n");
+
+            WRITE(p, "return ggx1 * ggx2;\n");
+        WRITE(p, "}\n");
+// ----------------------------------------------------------------------------
+        WRITE(p, "vec3 fresnelSchlick(float cosTheta, vec3 F0) {\n");
+            WRITE(p, "return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);\n");
+            WRITE(p, "}\n");
+// ----------------------------------------------------------------------------
+
+ WRITE(p, "void PBR__2_0() {\n");
+
+   WRITE(p, "vec3 N = normalize(v_1.xyz);\n");
+   WRITE(p, "vec3 fogcolor = vec3(mix(vec3(dot(u_fogcolor, vec3(0.299, 0.587, 0.114))),u_fogcolor, 0.5));\n");
+
+   WRITE(p, "float l = lightness(u_fogcolor.r , u_fogcolor.g ,u_fogcolor.b );\n");
+
+   WRITE(p, "vec3 ld;\n");
+   WRITE(p, "float ll;\n");
+   WRITE(p, "float min;\n");
+   WRITE(p, "fogcolor += 0.75 - l;\n");
+ WRITE(p, "vec3 fogcolor_inverse = 1.0 - fogcolor;\n");
+
+ WRITE(p, "vec3 diff1 ,diff2;\n");
+  //黑雾
+   WRITE(p, "if (l < 0.15) {\n");
+     WRITE(p, "min = 0.2;\n");
+     WRITE(p, "ll = 1.5;\n");
+     WRITE(p, "ld = normalize(v_5.xyz);\n");
+     WRITE(p, "ld.z = abs(ld.z) * 7.0;\n");
+
+     WRITE(p, "diff1 =( fogcolor)*ll;\n");
+     WRITE(p, "diff2 = fogcolor_inverse*ll;\n");
+
+
+     WRITE(p, "lightPositions[0].z = v_3.z* 1000.0;\n");
+     WRITE(p, "lightPositions[1].z = v_4.z * 1000.0;\n");
+
+     WRITE(p, "lightColors[0] = fogcolor_inverse;\n");
+     WRITE(p, "lightColors[1] =  fogcolor;\n");
+
+
+
+   WRITE(p, "} else {\n");
+
+     WRITE(p, "min = 0.1;\n");
+     WRITE(p, "ll = 2.0;\n");
+     WRITE(p, "ld = normalize(v_4.xyz);\n");
+     WRITE(p, "ld.z = abs(ld.z) * 5.0;\n");
+    WRITE(p, " diff1 =fogcolor_inverse;\n");
+     WRITE(p, "diff2 =  fogcolor *ll;\n");
+
+    WRITE(p, " lightPositions[0].z =v_4.z* 1000.0;\n");
+    WRITE(p, " lightPositions[1].z = v_3.z * 1000.0;\n");
+
+    WRITE(p, " lightColors[0] = fogcolor;\n");
+    WRITE(p, " lightColors[1] = fogcolor_inverse;\n");
+   WRITE(p, "}\n");
+   WRITE(p, "lightPositions[0].x = N.x * 1000.;\n");
+   WRITE(p, "lightPositions[0].y = N.y * 2000.;\n");
+
+  WRITE(p, "lightPositions[1].x = N.x * 3500.;\n");
+   WRITE(p, "lightPositions[1].y = N.y * 5000.;\n");
+
+
+   WRITE(p, "vec3 lightDir = normalize(ld * 1000.0 - v_2.xyz);\n");
+   WRITE(p, "float diff = max(dot(N, lightDir), 0.0);\n");
+
+   WRITE(p, "if (diff < min)diff = min;\n");
+
+  WRITE(p, " vec3 diffColor = mix(diff1,diff2 , diff);\n");
+
+   WRITE(p, "if (gl_FragCoord.w > 0.015) {\n");
+     WRITE(p, "vec3 V = normalize(camPos - v_2.xyz);\n");
+     WRITE(p, "vec3 F0 = vec3(0.04);\n");
+     WRITE(p, "F0 = mix(F0, albedo, metallic);\n");
+     WRITE(p, "vec3 Lo = vec3(0.0);\n");
+     WRITE(p, "for (int i = 0; i < 2; ++i) {\n");
+       WRITE(p, "vec3 L = normalize(lightPositions[i] - v_2.xyz);\n");
+      WRITE(p, " vec3 H = normalize(V + L);\n");
+       WRITE(p, "float NDF = DistributionGGX(N, H, roughness);\n");
+       WRITE(p, "float G = GeometrySmith(N, V, L, roughness);\n");
+       WRITE(p, "vec3 F = fresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);\n");
+       WRITE(p, "vec3 numerator = NDF * G * F;\n");
+       WRITE(p, "float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) +  0.0001;\n");
+       WRITE(p, "vec3 specular = numerator / denominator;\n");
+
+       WRITE(p, "vec3 kS = F;\n");
+       WRITE(p, "vec3 kD = vec3(1.0) - kS;\n");
+       WRITE(p, "kD *= 1.0 - metallic;\n");
+       WRITE(p, "float NdotL = max(dot(N, L), 0.0);\n");
+       WRITE(p, "Lo += (kD * albedo / PI + specular) * lightColors[i] * NdotL * 0.70;\n");
+     WRITE(p, "}\n");
+
+     WRITE(p, "vec3 ambient = albedo ;\n");
+     WRITE(p, "vec3 color = Lo + ambient;\n");
+
+    WRITE(p, " color = color / (color + vec3(1.0));\n");
+     WRITE(p, "color *= diffColor;\n");
+
+
+     WRITE(p, "fragColor0 = vec4(color, 1.0);\n");
+
+
+   WRITE(p, "} else {\n");
+     WRITE(p, "fragColor0 = vec4(albedo * diffColor *  0.75, 1.0);\n");
+   WRITE(p, "}\n");
+ WRITE(p, "}\n");
+
 		}
 
 		if (!enableFragmentTestCache) {
@@ -1225,6 +1512,99 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	}
 
 	WRITE(p, "}\n");
+
+#ifdef __FRAGMENT_GLSL_FILE__
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
+		const std::string modernGLSLName = StringFromFormat("Fragment_%016llx.glsl", (unsigned long long)id.ToUint64());
+		const Path modernGLSLPath = customGLSLDir / modernGLSLName;
+
+		// Only these two 2022 fragment entry points are legacy-special.
+		const bool isLegacySpecial =
+			legacyFlagValue == 0x32UL || legacyFlagValue == 0x2032UL;
+		NOTICE_LOG(Log::G3D, "Legacy GLSL fragment ROUTE: modern=%016llx legacy=0x%lx special=%d",
+			(unsigned long long)id.ToUint64(), legacyFlagValue, isLegacySpecial);
+
+		std::string modernCode;
+		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &modernCode);
+
+		if (isLegacySpecial) {
+			const std::string legacyGLSLName = StringFromFormat("Fragment_0x%lx.glsl", legacyFlagValue);
+			const Path legacyGLSLPath = customGLSLDir / legacyGLSLName;
+			std::string legacyCode;
+			const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL READ: %s=%d %zu bytes, %s=%d %zu bytes",
+				modernGLSLName.c_str(), hasModernGLSL, hasModernGLSL ? modernCode.size() : 0,
+				legacyGLSLName.c_str(), hasLegacyGLSL, hasLegacyGLSL ? legacyCode.size() : 0);
+
+			if (hasLegacyGLSL) {
+				std::string composedCode;
+				const bool composed = ComposeLegacyFragmentGLSL(std::string(buffer), legacyCode, &composedCode);
+				NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL COMPOSE: %s compose=%s generated=%zu legacy=%zu final=%zu",
+					legacyGLSLName.c_str(), composed ? "OK" : "FAILED", std::strlen(buffer), legacyCode.size(), composedCode.size());
+				if (composed && composedCode.size() < 16384) {
+					std::memcpy(buffer, composedCode.data(), composedCode.size());
+					buffer[composedCode.size()] = '\0';
+				} else {
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL COMPOSE REJECTED: %s", legacyGLSLName.c_str());
+				}
+			} else {
+				File::CreateFullPath(customGLSLDir);
+				const bool wroteLegacy = File::WriteStringToFile(true, buffer, legacyGLSLPath);
+				NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL EXPORT: %s write=%s bytes=%zu",
+					legacyGLSLName.c_str(), wroteLegacy ? "OK" : "FAILED", std::strlen(buffer));
+			}
+		} else if (hasModernGLSL) {
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment MODERN APPLY: %s", modernGLSLName.c_str());
+			if (modernCode.size() < 16384) {
+				std::memcpy(buffer, modernCode.data(), modernCode.size());
+				buffer[modernCode.size()] = '\0';
+			}
+		} else {
+			File::CreateFullPath(customGLSLDir);
+			const bool wroteModern = File::WriteStringToFile(true, buffer, modernGLSLPath);
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment MODERN EXPORT: %s write=%s bytes=%zu",
+				modernGLSLName.c_str(), wroteModern ? "OK" : "FAILED", std::strlen(buffer));
+		}
+
+		// Generate only the two legacy-special entry points shipped by the 2022 patch.
+		if (!generatingLegacySeed) {
+			const unsigned long legacySeedValues[] = { 0x32UL, 0x2032UL };
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL SEED PASS: 0x32, 0x2032");
+			for (unsigned long seedValue : legacySeedValues) {
+				const Path seedPath = customGLSLDir / StringFromFormat("Fragment_0x%lx.glsl", seedValue);
+				if (File::Exists(seedPath)) {
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL SEED EXISTS: 0x%lx", seedValue);
+					continue;
+				}
+
+				FShaderID seedID;
+				seedID.SetBit(FS_BIT_DO_TEXTURE);
+				seedID.SetBit(FS_BIT_ENABLE_FOG);
+
+				char seedBuffer[16384] = {};
+				uint64_t seedUniformMask = 0;
+				FragmentShaderFlags seedFlags = (FragmentShaderFlags)0;
+				std::string seedError;
+				generatingLegacySeed = true;
+				legacySeedValue = seedValue;
+				const bool seedOK = GenerateFragmentShader(seedID, seedBuffer, compat, bugs,
+					&seedUniformMask, &seedFlags, &seedError);
+				legacySeedValue = 0;
+				generatingLegacySeed = false;
+
+				if (seedOK) {
+					const bool wrote = File::WriteStringToFile(true, seedBuffer, seedPath);
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL SEED RESULT: 0x%lx generate=OK write=%s bytes=%zu",
+						seedValue, wrote ? "OK" : "FAILED", std::strlen(seedBuffer));
+				} else {
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL SEED GENERATE FAILED: 0x%lx error=%s",
+						seedValue, seedError.c_str());
+				}
+			}
+		}
+	}
+#endif
 
 	return true;
 }
