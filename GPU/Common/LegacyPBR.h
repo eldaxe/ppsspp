@@ -84,7 +84,7 @@ inline bool SaveGeneratedLegacyGLSL(const std::string &stage, uint64_t shaderID,
 	if (File::Exists(path))
 		return false;
 
-	if (!File::CreateFullPath(path.GetDirectory()))
+	if (!File::CreateFullPath(Path(path.GetDirectory())))
 		return false;
 
 	return File::WriteStringToFile(true, source, path);
