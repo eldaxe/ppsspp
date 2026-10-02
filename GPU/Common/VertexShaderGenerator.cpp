@@ -1172,7 +1172,7 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			File::WriteStringToFile(true, buffer, modernGLSLPath);
 			File::WriteStringToFile(true, buffer, legacyGLSLPath);
 		}
-		if (!customCode.empty() && customCode.size() < 16384) {		if (!customCode.empty() && customCode.size() < 16384) {
+		if (!customCode.empty() && customCode.size() < 16384) {
 			NOTICE_LOG(Log::G3D, "Legacy GLSL vertex APPLY override: %zu bytes", customCode.size());
 			std::memcpy(buffer, customCode.data(), customCode.size());
 			buffer[customCode.size()] = '\0';
