@@ -70,7 +70,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool highpFog = false;
 	bool highpTexcoord = false;
 	bool enableFragmentTestCache = gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) ||
-		(generatingLegacySeed && (legacySeedValue == 0x2032UL || legacySeedValue == 0x2072UL));
+		(generatingLegacySeed && (legacySeedValue == 0x32UL || legacySeedValue == 0x2032UL));
 
 	const bool fsMinmaxDiscard = id.Bit(FS_BIT_MINMAX_DISCARD);
 	const bool fsDepthClamp = id.Bit(FS_BIT_DEPTH_CLAMP);
@@ -261,7 +261,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	legacyFlags.set(_LEGACY_READ_FRAMEBUFFER_TEX, readFramebufferTex);
 	legacyFlags.set(_LEGACY_FRAG_COORD, needFragCoord);
 	legacyFlags.set(_LEGACY_WRITE_DEPTH, writeDepth);
-	const unsigned long legacyFlagValue = legacyFlags.to_ulong();
+	const unsigned long legacyFlagValue = generatingLegacySeed ? legacySeedValue : legacyFlags.to_ulong();
 	// These legacy fields no longer exist in the modern ShaderID. They remain
 	// explicit zero-valued compatibility fields so the 2022 metadata contract
 	// stays readable without changing modern shader generation.
@@ -515,7 +515,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 		// 2022 custom GLSL interface. The 2022 PBR helper implementation is emitted into generated GLSL,
 		// but is not invoked automatically; custom GLSL may call it.
-		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && (legacyFlagValue == 0x32 || legacyFlagValue == 0x72 || legacyFlagValue == 0x2032 || legacyFlagValue == 0x2072)) {
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && (legacyFlagValue == 0x32 || legacyFlagValue == 0x2032)) {
 			WRITE(p, "//****** my_varying_fs *********\n");
 			WRITE(p, "precision highp float;\n");
 			WRITE(p, "%s %s lowp flat int flag;\n", shading, compat.varying_fs);
@@ -1524,95 +1524,67 @@ if(is_opengles) {
 
 #ifdef __FRAGMENT_GLSL_FILE__
 	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
-		WRITE(p, "\n");
-		if (highpFog) WRITE(p, "//    highpFog 0\n");
-		if (enableFragmentTestCache) WRITE(p, "// enableFragmentTestCache 1\n");
-		if (texture3D) WRITE(p, "// texture3D 2\n");
-		if (lmode) WRITE(p, "// lmode 3\n");
-		if (doTexture) WRITE(p, "// doTexture 4\n");
-		if (enableFog) WRITE(p, "// enableFog 5\n");
-		if (enableAlphaTest) WRITE(p, "// enableAlphaTest 6\n");
-		if (alphaTestAgainstZero) WRITE(p, "// alphaTestAgainstZero 7\n");
-		if (testForceToZero) WRITE(p, "// testForceToZero 8\n");
-		if (enableColorTest) WRITE(p, "// enableColorTest 9\n");
-		if (colorTestAgainstZero) WRITE(p, "// colorTestAgainstZero 10\n");
-		if (enableColorDoubling) WRITE(p, "// enableColorDoubling 11\n");
-		if (doTextureProjection) WRITE(p, "// doTextureProjection 12\n");
-		if (doTextureAlpha) WRITE(p, "// doTextureAlpha 13\n");
-		if (flatBug) WRITE(p, "// flatBug 14\n");
-		if (doFlatShading) WRITE(p, "// doFlatShading 15\n");
-		if (shaderDepalMode != ShaderDepalMode::OFF) WRITE(p, "// shaderDepal 16\n");
-		if (smoothedDepal) WRITE(p, "// smoothedDepal 17\n");
-		if (bgraTexture) WRITE(p, "// bgraTexture 18\n");
-		if (colorWriteMask) WRITE(p, "// colorWriteMask 19\n");
-		if (needShaderTexClamp) WRITE(p, "// needShaderTexClamp 20\n");
-		if (blueToAlpha) WRITE(p, "// blueToAlpha 21\n");
-		if (isModeClear) WRITE(p, "// isModeClear 22\n");
-		if (useDiscardStencilBugWorkaround) WRITE(p, "// useDiscardStencilBugWorkaround 23\n");
-		if (needFramebufferRead) WRITE(p, "// readFramebuffer 24\n");
-		if (readFramebufferTex) WRITE(p, "// readFramebufferTex 25\n");
-		if (needFragCoord) WRITE(p, "// needFragCoord 26\n");
-		if (writeDepth) WRITE(p, "// writeDepth 27\n");
-		if (hasPackUnorm4x8) WRITE(p, "// hasPackUnorm4x8 28\n");
-		WRITE(p, "//flag_value = 0x%lx\n", legacyFlagValue);
+		const Path customGLSLDir = GetSysDirectory(DIRECTORY_PSP) / "SHADERS" / "GLSL";
+		const std::string modernGLSLName = StringFromFormat("Fragment_%016llx.glsl", (unsigned long long)id.ToUint64());
+		const Path modernGLSLPath = customGLSLDir / modernGLSLName;
 
-		// Legacy filename remains authoritative when present, matching the 2022
-		// replacement behavior. The modern filename is a parallel export.
+		// Only these two 2022 fragment entry points are legacy-special.
+		const bool isLegacySpecial =
+			legacyFlagValue == 0x32UL || legacyFlagValue == 0x2032UL;
+		NOTICE_LOG(Log::G3D, "Legacy GLSL fragment ROUTE: modern=%016llx legacy=0x%lx special=%d",
+			(unsigned long long)id.ToUint64(), legacyFlagValue, isLegacySpecial);
+
 		std::string modernCode;
-		std::string legacyCode;
 		const bool hasModernGLSL = File::ReadTextFileToString(modernGLSLPath, &modernCode);
-		const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
-		NOTICE_LOG(Log::G3D, "Legacy GLSL fragment READ: modern=%s %zu bytes, legacy=%s %zu bytes", hasModernGLSL ? "yes" : "no", hasModernGLSL ? modernCode.size() : 0, hasLegacyGLSL ? "yes" : "no", hasLegacyGLSL ? legacyCode.size() : 0);
 
-		// A hand-provided 2022 legacy file is authoritative. Otherwise preserve
-		// the current modern custom shader. Only a completely new shader is
-		// exported under both names, so a generated legacy file cannot become
-		// an accidental override of a later modern custom shader.
-		std::string customCode;
-		if (hasLegacyGLSL) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment OVERRIDE: %s", legacyGLSLName.c_str());
-			customCode = legacyCode;
-			if (!hasModernGLSL) {
+		if (isLegacySpecial) {
+			const std::string legacyGLSLName = StringFromFormat("Fragment_0x%lx.glsl", legacyFlagValue);
+			const Path legacyGLSLPath = customGLSLDir / legacyGLSLName;
+			std::string legacyCode;
+			const bool hasLegacyGLSL = File::ReadTextFileToString(legacyGLSLPath, &legacyCode);
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL READ: %s=%d %zu bytes, %s=%d %zu bytes",
+				modernGLSLName.c_str(), hasModernGLSL, hasModernGLSL ? modernCode.size() : 0,
+				legacyGLSLName.c_str(), hasLegacyGLSL, hasLegacyGLSL ? legacyCode.size() : 0);
+
+			if (hasLegacyGLSL) {
+				NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL APPLY: %s", legacyGLSLName.c_str());
+				if (legacyCode.size() < 16384) {
+					std::memcpy(buffer, legacyCode.data(), legacyCode.size());
+					buffer[legacyCode.size()] = '\0';
+				}
+			} else {
 				File::CreateFullPath(customGLSLDir);
-				File::WriteStringToFile(true, customCode, modernGLSLPath);
+				const bool wroteLegacy = File::WriteStringToFile(true, buffer, legacyGLSLPath);
+				NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL EXPORT: %s write=%s bytes=%zu",
+					legacyGLSLName.c_str(), wroteLegacy ? "OK" : "FAILED", std::strlen(buffer));
 			}
 		} else if (hasModernGLSL) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment MODERN OVERRIDE: %s", modernGLSLName.c_str());
-			customCode = modernCode;
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment MODERN APPLY: %s", modernGLSLName.c_str());
+			if (modernCode.size() < 16384) {
+				std::memcpy(buffer, modernCode.data(), modernCode.size());
+				buffer[modernCode.size()] = '\0';
+			}
 		} else {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment EXPORT: %s and %s", modernGLSLName.c_str(), legacyGLSLName.c_str());
 			File::CreateFullPath(customGLSLDir);
-			File::WriteStringToFile(true, buffer, modernGLSLPath);
-			File::WriteStringToFile(true, buffer, legacyGLSLPath);
-		}
-		if (!customCode.empty() && customCode.size() < 16384) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment APPLY override: %zu bytes", customCode.size());
-			std::memcpy(buffer, customCode.data(), customCode.size());
-			buffer[customCode.size()] = '\0';
+			const bool wroteModern = File::WriteStringToFile(true, buffer, modernGLSLPath);
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment MODERN EXPORT: %s write=%s bytes=%zu",
+				modernGLSLName.c_str(), wroteModern ? "OK" : "FAILED", std::strlen(buffer));
 		}
 
-		// Seed the two fragment entry points shipped by the 2022 GLSL pack.
-		// They are compatibility entry points, not necessarily states emitted by
-		// today's pipeline. Existing files always take precedence.
+		// Generate only the two legacy-special entry points shipped by the 2022 patch.
 		if (!generatingLegacySeed) {
-			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED PASS: 0x2032, 0x2072");
-			const unsigned long legacySeedValues[] = { 0x2032UL, 0x2072UL };
+			const unsigned long legacySeedValues[] = { 0x32UL, 0x2032UL };
+			NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL SEED PASS: 0x32, 0x2032");
 			for (unsigned long seedValue : legacySeedValues) {
 				const Path seedPath = customGLSLDir / StringFromFormat("Fragment_0x%lx.glsl", seedValue);
 				if (File::Exists(seedPath)) {
-					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED EXISTS: 0x%lx %s", seedValue, seedPath.c_str());
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL SEED EXISTS: 0x%lx", seedValue);
 					continue;
 				}
-				NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED GENERATE: 0x%lx -> %s", seedValue, seedPath.c_str());
 
 				FShaderID seedID;
-				// Express the 2022 entry points using today's ShaderID.
-				// The old fragment-test-cache field is a runtime capability and
-				// is forced only while bootstrapping these legacy seed shaders.
 				seedID.SetBit(FS_BIT_DO_TEXTURE);
 				seedID.SetBit(FS_BIT_ENABLE_FOG);
-				if (seedValue == 0x2072UL)
-					seedID.SetBit(FS_BIT_ALPHA_TEST);
 
 				char seedBuffer[16384] = {};
 				uint64_t seedUniformMask = 0;
@@ -1627,15 +1599,17 @@ if(is_opengles) {
 
 				if (seedOK) {
 					const bool wrote = File::WriteStringToFile(true, seedBuffer, seedPath);
-					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED RESULT: 0x%lx generate=OK write=%s bytes=%zu path=%s", seedValue, wrote ? "OK" : "FAILED", std::strlen(seedBuffer), seedPath.c_str());
-					if (!wrote) NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED WRITE FAILED: %s", seedPath.c_str());
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL SEED RESULT: 0x%lx generate=OK write=%s bytes=%zu",
+						seedValue, wrote ? "OK" : "FAILED", std::strlen(seedBuffer));
 				} else {
-					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SEED GENERATE FAILED: 0x%lx error=%s", seedValue, seedError.c_str());
+					NOTICE_LOG(Log::G3D, "Legacy GLSL fragment SPECIAL SEED GENERATE FAILED: 0x%lx error=%s",
+						seedValue, seedError.c_str());
 				}
 			}
 		}
 	}
 #endif
+
 	return true;
 }
 
