@@ -1253,8 +1253,13 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	WRITE(p, "}\n");
 	std::string overrideSource;
-	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && LoadLegacyGLSLOverride("Fragment", id.ToUint64(), &overrideSource)) {
-		memcpy(buffer, overrideSource.c_str(), overrideSource.size() + 1);
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+		if (LoadLegacyGLSLOverride("Fragment", id.ToUint64(), &overrideSource)) {
+			memcpy(buffer, overrideSource.c_str(), overrideSource.size() + 1);
+		} else {
+			SaveGeneratedLegacyGLSL("Fragment", id.ToUint64(), std::string(buffer));
+		}
+	}
 	}
 
 	return true;
