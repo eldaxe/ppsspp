@@ -48,16 +48,9 @@ static bool ComposeLegacyVertexGLSL(const std::string &generatedCode, const std:
 	if (generatedMain == std::string::npos || legacyMain == std::string::npos)
 		return false;
 
-	const size_t customStart = legacyCode.find("vec3 normalizeOr001(");
-	std::string legacyHelpers;
-	if (customStart != std::string::npos && customStart < legacyMain)
-		legacyHelpers = legacyCode.substr(customStart, legacyMain - customStart);
-
+	// normalizeOr001() is already supplied by the generated PPSSPP vertex support.
+	// Do not duplicate the helper from the old legacy file.
 	*composed = generatedCode.substr(0, generatedMain);
-	if (!legacyHelpers.empty()) {
-		composed->append("\n// Legacy custom GLSL helpers\n");
-		composed->append(legacyHelpers);
-	}
 	composed->append("\n");
 	composed->append(legacyCode.substr(legacyMain));
 	return true;
