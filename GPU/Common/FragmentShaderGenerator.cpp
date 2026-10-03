@@ -110,7 +110,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool lmode = id.Bit(FS_BIT_LMODE);
 	bool doTexture = id.Bit(FS_BIT_DO_TEXTURE);
 	bool enableFog = id.Bit(FS_BIT_ENABLE_FOG);
-	const bool legacyPBRFragmentBase = ShaderLanguageIsOpenGL(compat.shaderLanguage) && doTexture && enableFog;
+	const bool legacyPBRFragmentBase = ShaderLanguageIsOpenGL(compat.shaderLanguage) && id.Bit(FS_BIT_LEGACY_PBR);
 	const bool legacyPBRFragmentAlpha = legacyPBRFragmentBase && doTextureAlpha;
 	bool enableAlphaTest = id.Bit(FS_BIT_ALPHA_TEST);
 
