@@ -7,21 +7,31 @@
 #include "Core/Util/PathUtil.h"
 #include "Common/File/FileUtil.h"
 #include "Common/StringUtils.h"
+#include "GPU/ge_constants.h"
 
-// The legacy vertex flags included _doTexture and _enableFog, but the modern
-// VShaderID does not carry either fragment-state bit. Those conditions are
-// validated by the fragment shader when it selects the legacy PBR path.
-// Here we only test state represented by VShaderID.
-inline bool LegacyPBRVertexMode1(bool useHWTransform, bool hasNormal, bool hasTexcoord, bool enableLighting, bool vertexRangeCulling) {
-	return useHWTransform && hasNormal && hasTexcoord && enableLighting && vertexRangeCulling;
+// The old patch used exact vertex IDs. Reconstruct their vertex-side
+// conditions from the modern VShaderID instead of using the old numeric IDs.
+// Texture and fog remain fragment-side conditions and are checked separately.
+inline bool LegacyPBRVertexMode1(bool useHWTransform, bool hasNormal, bool hasTexcoord,
+	bool hasColor, bool lmode, bool normReverse, bool flatShading, int uvGenMode,
+	bool enableLighting, bool vertexRangeCulling) {
+	return useHWTransform && hasNormal && hasTexcoord &&
+		!hasColor && !lmode && !normReverse && !flatShading &&
+		uvGenMode == GE_TEXMAP_TEXTURE_COORDS &&
+		enableLighting && vertexRangeCulling;
 }
 
-inline bool LegacyPBRVertexMode2(bool useHWTransform, bool hasTexcoord, bool enableLighting, bool vertexRangeCulling) {
-	return useHWTransform && hasTexcoord && enableLighting && vertexRangeCulling;
+inline bool LegacyPBRVertexMode2(bool useHWTransform, bool hasNormal, bool hasTexcoord,
+	bool hasColor, bool lmode, bool normReverse, bool flatShading, int uvGenMode,
+	bool enableLighting, bool vertexRangeCulling) {
+	return useHWTransform && !hasNormal && hasTexcoord &&
+		!hasColor && !lmode && !normReverse && !flatShading &&
+		uvGenMode == GE_TEXMAP_TEXTURE_COORDS &&
+		enableLighting && vertexRangeCulling;
 }
 
-inline bool LegacyPBRFragmentBase(bool enableFragmentTestCache, bool doTexture, bool enableFog) {
-	return enableFragmentTestCache && doTexture && enableFog;
+inline bool LegacyPBRFragmentBase(bool doTexture, bool enableFog) {
+	return doTexture && enableFog;
 }
 
 inline void WriteLegacyPBRVaryingVS(ShaderWriter &p, const char *varying) {
