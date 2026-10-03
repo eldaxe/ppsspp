@@ -718,9 +718,14 @@ LinkedShader *ShaderManagerGLES::ApplyFragmentShader(VShaderID VSID, Shader *vs,
 		lastShader_ = nullptr;
 		gstate_c.Clean(DIRTY_FRAGMENTSHADER_STATE);
 		ComputeFragmentShaderID(&FSID, pipelineState, draw_->GetBugs(), clipInfoFlags);
-		// Legacy PBR alpha is an OpenGL/GLES-only shader variant.
-		if (gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) && gstate.isTextureMapEnabled() && gstate.isFogEnabled() && gstate.isTextureAlphaUsed()) {
-			FSID.SetBit(FS_BIT_LEGACY_PBR_ALPHA);
+		// Legacy PBR variants are OpenGL/GLES-only and preserve the old 2022
+		// fragment identity: fragment-test-cache + texture + fog.
+		if (gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) &&
+			gstate.isTextureMapEnabled() &&
+			gstate.isFogEnabled()) {
+			FSID.SetBit(FS_BIT_LEGACY_PBR);
+			if (gstate.isTextureAlphaUsed())
+				FSID.SetBit(FS_BIT_LEGACY_PBR_ALPHA);
 		}
 	} else {
 		FSID = lastFSID_;
@@ -860,7 +865,7 @@ enum class CacheDetectFlags {
 };
 
 #define CACHE_HEADER_MAGIC 0x83277592
-#define CACHE_VERSION 45
+#define CACHE_VERSION 46
 
 struct CacheHeader {
 	uint32_t magic;
