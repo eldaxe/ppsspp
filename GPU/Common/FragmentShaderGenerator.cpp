@@ -1260,7 +1260,6 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			SaveGeneratedLegacyGLSL("Fragment", id.ToUint64(), std::string(buffer));
 		}
 	}
-	}
 
 	return true;
 }
