@@ -550,6 +550,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 	}
 
+	WRITE(p, "  bool legacyPBRActive = false;\n");
+	WRITE(p, "  vec4 legacyPBRColor = vec4(0.0);\n");
+
 	if (isModeClear) {
 		// Clear mode does not allow any fancy shading.
 		WRITE(p, "  vec4 v = v_color0;\n");
@@ -872,8 +875,6 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		}
 
 		// Legacy PBR is generated before the normal post-processing. Preserve its result for the final output.
-		WRITE(p, "  bool legacyPBRActive = false;\n");
-		WRITE(p, "  vec4 legacyPBRColor = vec4(0.0);\n");
 
 		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
 			WRITE(p, "  if (flag == 1) {\n");
