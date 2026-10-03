@@ -1032,6 +1032,5 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 			SaveGeneratedLegacyGLSL("Vertex", id.ToUint64(), std::string(buffer));
 		}
 	}
-	}
 	return true;
 }
