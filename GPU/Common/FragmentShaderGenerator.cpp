@@ -883,6 +883,8 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 				WRITE(p, "      albedo = tex_color.rgb;\n");
 				WRITE(p, "      roughness = 1.0 - (t.a - roughness);\n");
 				WRITE(p, "      PBR__2_0();\n");
+                WRITE(p, "      legacyPBRColor = fragColor0;\n");
+                WRITE(p, "      legacyPBRActive = true;\n");
 				WRITE(p, "    } else {\n");
 				WRITE(p, "      legacyPBRColor = vec4(tex_color.rgb, 1.0);\n");
 				WRITE(p, "      legacyPBRActive = true;\n");
