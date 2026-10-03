@@ -110,7 +110,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 	bool lmode = id.Bit(FS_BIT_LMODE);
 	bool doTexture = id.Bit(FS_BIT_DO_TEXTURE);
 	bool enableFog = id.Bit(FS_BIT_ENABLE_FOG);
-	const bool legacyPBRFragmentBase = LegacyPBRFragmentBase(enableFragmentTestCache, doTexture, enableFog);
+	const bool legacyPBRFragmentBase = ShaderLanguageIsOpenGL(compat.shaderLanguage) && doTexture && enableFog;
 	const bool legacyPBRFragmentAlpha = legacyPBRFragmentBase && doTextureAlpha;
 	bool enableAlphaTest = id.Bit(FS_BIT_ALPHA_TEST);
 
@@ -871,6 +871,10 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 			WRITE(p, "  vec4 v = v_color0%s;\n", secondary);
 		}
 
+		// Legacy PBR is generated before the normal post-processing. Preserve its result for the final output.
+		WRITE(p, "  bool legacyPBRActive = false;\n");
+		WRITE(p, "  vec4 legacyPBRColor = vec4(0.0);\n");
+
 		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
 			WRITE(p, "  if (flag == 1) {\n");
 			if (legacyPBRFragmentAlpha) {
@@ -880,11 +884,14 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 				WRITE(p, "      roughness = 1.0 - (t.a - roughness);\n");
 				WRITE(p, "      PBR__2_0();\n");
 				WRITE(p, "    } else {\n");
-				WRITE(p, "      fragColor0 = vec4(tex_color.rgb, 1.0);\n");
+				WRITE(p, "      legacyPBRColor = vec4(tex_color.rgb, 1.0);\n");
+				WRITE(p, "      legacyPBRActive = true;\n");
 				WRITE(p, "    }\n");
 			} else {
 				WRITE(p, "    albedo = t.xyz;\n");
 				WRITE(p, "    PBR__2_0();\n");
+				WRITE(p, "    legacyPBRColor = fragColor0;\n");
+				WRITE(p, "    legacyPBRActive = true;\n");
 			}
 			WRITE(p, "  }\n");
 		}
@@ -1149,7 +1156,7 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 		break;
 
 	case REPLACE_ALPHA_NO:
-		WRITE(p, "  %s = v;\n", compat.fragColor0);
+		WRITE(p, "  %s = legacyPBRActive ? legacyPBRColor : v;\n", compat.fragColor0);
 		break;
 
 	default:
@@ -1263,4 +1270,3 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	return true;
 }
-
