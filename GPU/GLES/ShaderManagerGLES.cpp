@@ -47,6 +47,7 @@
 #include "GPU/ge_constants.h"
 #include "GPU/Common/ShaderUniforms.h"
 #include "GPU/Common/TransformCommon.h"
+#include "GPU/Common/LegacyPBR.h"
 #include "GPU/GLES/ShaderManagerGLES.h"
 #include "GPU/GLES/DrawEngineGLES.h"
 
@@ -720,7 +721,32 @@ LinkedShader *ShaderManagerGLES::ApplyFragmentShader(VShaderID VSID, Shader *vs,
 		ComputeFragmentShaderID(&FSID, pipelineState, draw_->GetBugs(), clipInfoFlags);
 		// Legacy PBR variants are OpenGL/GLES-only and preserve the old 2022
 		// fragment identity: fragment-test-cache + texture + fog.
-		if (gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) &&
+		const bool legacyPBRVertex =
+			LegacyPBRVertexMode1(
+				VSID.Bit(VS_BIT_USE_HW_TRANSFORM),
+				VSID.Bit(VS_BIT_HAS_NORMAL),
+				VSID.Bit(VS_BIT_HAS_TEXCOORD),
+				VSID.Bit(VS_BIT_HAS_COLOR),
+				VSID.Bit(VS_BIT_LMODE),
+				VSID.Bit(VS_BIT_NORM_REVERSE),
+				VSID.Bit(VS_BIT_FLATSHADE),
+				VSID.Bits(VS_BIT_UVGEN_MODE, 2),
+				VSID.Bit(VS_BIT_LIGHTING_ENABLE),
+				VSID.Bit(VS_BIT_VERTEX_RANGE_CULLING)) ||
+			LegacyPBRVertexMode2(
+				VSID.Bit(VS_BIT_USE_HW_TRANSFORM),
+				VSID.Bit(VS_BIT_HAS_NORMAL),
+				VSID.Bit(VS_BIT_HAS_TEXCOORD),
+				VSID.Bit(VS_BIT_HAS_COLOR),
+				VSID.Bit(VS_BIT_LMODE),
+				VSID.Bit(VS_BIT_NORM_REVERSE),
+				VSID.Bit(VS_BIT_FLATSHADE),
+				VSID.Bits(VS_BIT_UVGEN_MODE, 2),
+				VSID.Bit(VS_BIT_LIGHTING_ENABLE),
+				VSID.Bit(VS_BIT_VERTEX_RANGE_CULLING));
+
+		if (legacyPBRVertex &&
+			gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) &&
 			gstate.isTextureMapEnabled() &&
 			gstate.isFogEnabled()) {
 			FSID.SetBit(FS_BIT_LEGACY_PBR);
