@@ -189,7 +189,7 @@ public:
 
 private:
 	void Clear();
-	Shader *CompileFragmentShader(FShaderID id);
+	Shader *CompileFragmentShader(FShaderID id, VShaderID VSID);
 	Shader *CompileVertexShader(VShaderID id);
 
 	struct LinkedShaderCacheEntry {
