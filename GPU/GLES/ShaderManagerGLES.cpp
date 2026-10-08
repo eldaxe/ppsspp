@@ -629,7 +629,7 @@ Shader *ShaderManagerGLES::CompileFragmentShader(FShaderID FSID, VShaderID VSID)
 	uint64_t uniformMask;
 	std::string errorString;
 	FragmentShaderFlags flags;
-	if (!GenerateFragmentShader(FSID, codeBuffer_, draw_->GetShaderLanguageDesc(), draw_->GetBugs(), &uniformMask, &flags, &errorString)) {
+	if (!GenerateFragmentShader(FSID, &VSID, codeBuffer_, draw_->GetShaderLanguageDesc(), draw_->GetBugs(), &uniformMask, &flags, &errorString)) {
 		ERROR_LOG_REPORT(Log::G3D, "FS shader gen error: %s (%s: %s)", errorString.c_str(), "GLES", FSID.ToDebugString().c_str());
 		return nullptr;
 	}
@@ -998,7 +998,16 @@ bool ShaderManagerGLES::LoadCache(File::IOFile &f) {
 	for (size_t &i = pending.fragPos; i < pending.frag.size(); i++) {
 		const FShaderID &id = pending.frag[i];
 		if (!fsCache_.ContainsKey(id)) {
-			Shader *fs = CompileFragmentShader(id);
+			// Fragment generation may depend on the linked vertex shader for legacy GLSL modes.
+			// Use the first vertex shader linked to this fragment ID in the pending cache.
+			VShaderID linkedVSID;
+			for (size_t linkIndex = pending.linkPos; linkIndex < pending.link.size(); ++linkIndex) {
+				if (pending.link[linkIndex].second == id) {
+					linkedVSID = pending.link[linkIndex].first;
+					break;
+				}
+			}
+			Shader *fs = CompileFragmentShader(id, linkedVSID);
 			if (!fs) {
 				// Give up on using the cache - something went wrong.
 				// We'll still keep the shaders we generated so far around.
