@@ -68,6 +68,10 @@ struct ReplacedTextureDecodeInfo {
 	Draw::DataFormat fmt;
 };
 
+struct TextureAnimation {
+	std::vector<std::string> filenames;
+};
+
 enum class ReplacerDecimateMode {
 	NEW_FRAME,
 	FORCE_PRESSURE,
@@ -92,6 +96,8 @@ public:
 
 	// Returns nullptr if not found.
 	ReplacedTexture *FindReplacement(ReplacementCacheKey key, int w, int h);
+
+	bool IsAnimationFrameChanged(ReplacementCacheKey key, ReplacedTexture *current, int w, int h);
 
 	// For testing: point the replacer at a texture pack directory and load its
 	// ini, without touching the global config. Returns true on success.
@@ -125,6 +131,8 @@ protected:
 	void ParseReduceHashRange(const std::string& key, const std::string& value);
 	bool LookupHashRange(u32 addr, int w, int h, int *newW, int *newH);
 	float LookupReduceHashRange(int w, int h);
+	bool BuildAnimationFrames(VFSBackend *dir, const std::string &path, std::vector<std::string> *frames);
+	const TextureAnimation *FindAnimation(ReplacementCacheKey key) const;
 	std::string LookupHashFile(ReplacementCacheKey key, bool *foundAlias, bool *ignored);
 
 	bool replaceEnabled_ = false;
@@ -136,6 +144,8 @@ protected:
 	int skipLastDXT1Blocks128x128_ = 0;
 
 	float reduceHashGlobalValue = 0.5f; // Global value for textures dump pngs of all sizes, 0.5 by default but can be set in textures.ini
+	float animationFPS_ = 10.0f;
+	double animationStartTime_ = 0.0;
 
 	double lastTextureCacheSizeGB_ = 0.0;
 	std::string gameID_;
@@ -154,6 +164,7 @@ protected:
 
 	std::unordered_map<ReplacementCacheKey, std::string> aliases_;
 	std::unordered_map<ReplacementCacheKey, TextureFiltering> filtering_;
+	std::unordered_map<ReplacementCacheKey, TextureAnimation> animations_;
 
 	std::unordered_map<ReplacementCacheKey, ReplacedTextureRef> cache_;
 	std::unordered_map<ReplacementCacheKey, SavedTextureCacheData> savedCache_;
