@@ -15,6 +15,7 @@
 #include "Common/Log.h"
 #include "Common/Data/Convert/ColorConv.h"
 #include "Core/Util/PathUtil.h"
+#include "Core/Config.h"
 
 #include "UI/UIAtlas.h"
 
@@ -383,7 +384,13 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 	}
 	Path customButtons = GetSysDirectory(DIRECTORY_SYSTEM) / "buttons.svg";
 	if (File::Exists(customButtons)) {
-		if (!RasterizeSVG(customButtons.c_str(), dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
+		// Touch buttons can be rasterized at a higher resolution than the rest of the
+		// UI atlas. AtlasImage::w/h remain logical UI pixels because RasterizeSVG
+		// stores the raster scale in Image::scale.
+		static constexpr float kTouchAtlasMultipliers[] = { 1.0f, 2.0f, 4.0f, 8.0f };
+		const int quality = std::clamp(g_Config.iTouchButtonAtlasScale, 0, (int)ARRAY_SIZE(kTouchAtlasMultipliers) - 1);
+		const float touchDpiScale = dpiScale * kTouchAtlasMultipliers[quality];
+		if (!RasterizeSVG(customButtons.c_str(), touchDpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
 			return false;
 		}
 	} else {
