@@ -382,21 +382,16 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 	if (!RasterizeSVG("ui_images/images.svg", dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
 		return false;
 	}
+	// Apply the touch SVG quality setting to both user and built-in buttons.svg.
+	// RasterizeSVG stores the actual raster scale in Image::scale, so logical UI size is preserved.
+	static constexpr float kTouchAtlasMultipliers[] = { 1.0f, 2.0f, 4.0f, 8.0f };
+	const int quality = std::clamp(g_Config.iTouchButtonAtlasScale, 0, (int)ARRAY_SIZE(kTouchAtlasMultipliers) - 1);
+	const float touchDpiScale = dpiScale * kTouchAtlasMultipliers[quality];
 	Path customButtons = GetSysDirectory(DIRECTORY_SYSTEM) / "buttons.svg";
-	if (File::Exists(customButtons)) {
-		// Touch buttons can be rasterized at a higher resolution than the rest of the
-		// UI atlas. AtlasImage::w/h remain logical UI pixels because RasterizeSVG
-		// stores the raster scale in Image::scale.
-		static constexpr float kTouchAtlasMultipliers[] = { 1.0f, 2.0f, 4.0f, 8.0f };
-		const int quality = std::clamp(g_Config.iTouchButtonAtlasScale, 0, (int)ARRAY_SIZE(kTouchAtlasMultipliers) - 1);
-		const float touchDpiScale = dpiScale * kTouchAtlasMultipliers[quality];
-		if (!RasterizeSVG(customButtons.c_str(), touchDpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
-			return false;
-		}
-	} else {
-		if (!RasterizeSVG("ui_images/buttons.svg", dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
-			return false;
-		}
+	const char *buttonsSVG = File::Exists(customButtons) ? customButtons.c_str() : "ui_images/buttons.svg";
+	INFO_LOG(Log::G3D, "Touch button SVG quality: %dx (base scale %.2f, requested raster scale %.2f)", (int)kTouchAtlasMultipliers[quality], dpiScale, touchDpiScale);
+	if (!RasterizeSVG(buttonsSVG, touchDpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
+		return false;
 	}
 	Instant shadowStart = Instant::Now();
 
