@@ -72,6 +72,22 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 	bool texture3D = id.Bit(FS_BIT_3D_TEXTURE);
 	bool doTextureAlpha = id.Bit(FS_BIT_LEGACY_PBR_ALPHA);
 	bool arrayTexture = id.Bit(FS_BIT_SAMPLE_ARRAY_TEXTURE);
+
+	bool linkedLegacyPBRVertexMode1 = false;
+	bool linkedLegacyPBRVertexMode2 = false;
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && linkedVSID) {
+		linkedLegacyPBRVertexMode1 = LegacyPBRVertexMode1(
+			linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
+			linkedVSID->Bit(VS_BIT_HAS_NORMAL),
+			linkedVSID->Bit(VS_BIT_HAS_TEXCOORD) || !linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
+			linkedVSID->Bit(VS_BIT_LIGHTING_ENABLE),
+			linkedVSID->Bit(VS_BIT_VERTEX_RANGE_CULLING));
+		linkedLegacyPBRVertexMode2 = LegacyPBRVertexMode2(
+			linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
+			linkedVSID->Bit(VS_BIT_HAS_TEXCOORD) || !linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
+			linkedVSID->Bit(VS_BIT_LIGHTING_ENABLE),
+			linkedVSID->Bit(VS_BIT_VERTEX_RANGE_CULLING));
+	}
 	bool forceDepthWritesOff = id.Bit(FS_BIT_DEPTH_TEST_NEVER);
 	bool useDiscardStencilBugWorkaround = id.Bit(FS_BIT_NO_DEPTH_CANNOT_DISCARD_STENCIL) && !forceDepthWritesOff;
 
@@ -131,7 +147,11 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 	bool lmode = id.Bit(FS_BIT_LMODE);
 	bool doTexture = id.Bit(FS_BIT_DO_TEXTURE);
 	bool enableFog = id.Bit(FS_BIT_ENABLE_FOG);
-	const bool legacyPBRFragmentBase = ShaderLanguageIsOpenGL(compat.shaderLanguage) && doTexture && enableFog;
+	const bool legacyPBRFragmentBase =
+		ShaderLanguageIsOpenGL(compat.shaderLanguage) &&
+		linkedLegacyPBRVertexMode1 &&
+		doTexture &&
+		enableFog;
 	const bool legacyPBRFragmentAlpha = legacyPBRFragmentBase && doTextureAlpha;
 	bool enableAlphaTest = id.Bit(FS_BIT_ALPHA_TEST);
 
