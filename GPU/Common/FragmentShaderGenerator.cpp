@@ -49,7 +49,7 @@ static const SamplerDef samplersStereo[3] = {
 	{ 2, "pal" },
 };
 
-bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint64_t *uniformMask, FragmentShaderFlags *fragmentShaderFlags, std::string *errorString) {
+bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint64_t *uniformMask, FragmentShaderFlags *fragmentShaderFlags, std::string *errorString) {
 	*uniformMask = 0;
 	*fragmentShaderFlags = (FragmentShaderFlags)0;
 	errorString->clear();
@@ -104,6 +104,9 @@ bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLangu
 
 	ShaderWriter p(buffer, compat, ShaderStage::Fragment, extensions, flags);
 	p.C("// %").W(id.Description()).endl();
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && linkedVSID) {
+		p.F("// Used by vertex%016llx.glsl\\n", (unsigned long long)linkedVSID->ToUint64());
+	}
 
 	p.ApplySamplerMetadata(arrayTexture ? samplersStereo : samplersMono);
 
