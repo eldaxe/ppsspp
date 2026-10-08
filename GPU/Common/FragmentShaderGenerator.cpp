@@ -74,16 +74,10 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 	bool arrayTexture = id.Bit(FS_BIT_SAMPLE_ARRAY_TEXTURE);
 
 	bool linkedLegacyPBRVertexMode1 = false;
-	bool linkedLegacyPBRVertexMode2 = false;
 	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && linkedVSID) {
 		linkedLegacyPBRVertexMode1 = LegacyPBRVertexMode1(
 			linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
 			linkedVSID->Bit(VS_BIT_HAS_NORMAL),
-			linkedVSID->Bit(VS_BIT_HAS_TEXCOORD) || !linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
-			linkedVSID->Bit(VS_BIT_LIGHTING_ENABLE),
-			linkedVSID->Bit(VS_BIT_VERTEX_RANGE_CULLING));
-		linkedLegacyPBRVertexMode2 = LegacyPBRVertexMode2(
-			linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
 			linkedVSID->Bit(VS_BIT_HAS_TEXCOORD) || !linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
 			linkedVSID->Bit(VS_BIT_LIGHTING_ENABLE),
 			linkedVSID->Bit(VS_BIT_VERTEX_RANGE_CULLING));
