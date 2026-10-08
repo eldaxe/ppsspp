@@ -43,7 +43,7 @@ jobs:
       - name: Setup JDK
         uses: actions/setup-java@v6.0.1
         with:
-          distribution: 'eclipse-temurin'
+          distribution: 'jetbrains'
           java-version: '21'
           cache: 'gradle'
         
