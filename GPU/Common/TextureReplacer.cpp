@@ -600,7 +600,8 @@ bool TextureReplacer::BuildAnimationFrames(VFSBackend *dir, const std::string &p
 	frames->clear();
 	for (int frame = 0; frame < 1000000; ++frame) {
 		std::string filename = StringFromFormat("%s/%d.png", path.c_str(), frame);
-		if (!dir->GetFileInfo(filename).exists)
+		File::FileInfo info;
+		if (!dir->GetFileInfo(filename, &info) || !info.exists)
 			break;
 		frames->push_back(filename);
 	}
