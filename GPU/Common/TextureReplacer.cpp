@@ -145,6 +145,7 @@ bool TextureReplacer::LoadIni(std::string *error, bool notify) {
 	textureHash_ = ReplacedTextureHash::QUICK;
 	aliases_.clear();
 	hashranges_.clear();
+	animations_.clear();
 	filtering_.clear();
 	reducehashranges_.clear();
 	// These hold what the old ini said about each texture, including "no replacement" markers.
@@ -157,6 +158,8 @@ bool TextureReplacer::LoadIni(std::string *error, bool notify) {
 	reduceHashGlobalValue = 0.5;
 	// Prevents dumping the mipmaps.
 	ignoreMipmap_ = false;
+	animationFPS_ = 10.0f;
+	animationStartTime_ = time_now_d();
 
 	DeleteVFS();
 
@@ -210,7 +213,7 @@ bool TextureReplacer::LoadIni(std::string *error, bool notify) {
 				}
 
 				INFO_LOG(Log::TexReplacement, "Loading extra texture ini: %s", overrideFilename.c_str());
-				if (!LoadIniValues(overrideIni, nullptr, true, error)) {
+				if (!LoadIniValues(overrideIni, dir, true, error)) {
 					*error = "Override: " + *error;
 					delete dir;
 					return false;
@@ -346,6 +349,10 @@ bool TextureReplacer::LoadIniValues(IniFile &ini, VFSBackend *dir, bool isOverri
 	// Multiplies sizeInRAM/bytesPerLine in XXHASH by 0.5.
 	options->Get("reduceHash", &reduceHash_);
 	options->Get("ignoreMipmap", &ignoreMipmap_);
+	options->Get("animationFPS", &animationFPS_);
+	if (animationFPS_ <= 0.0f)
+		animationFPS_ = 10.0f;
+	animationFPS_ = std::min(animationFPS_, 240.0f);
 	options->Get("skipLastDXT1Blocks128x64", &skipLastDXT1Blocks128x64_);
 	options->Get("skipLastDXT1Blocks128x128", &skipLastDXT1Blocks128x128_);
 	if (reduceHash_ && textureHash_ == ReplacedTextureHash::QUICK) {
@@ -430,6 +437,39 @@ bool TextureReplacer::LoadIniValues(IniFile &ini, VFSBackend *dir, bool isOverri
 		auto err = GetI18NCategory(I18NCat::ERRORS);
 		g_OSD.Show(OSDType::MESSAGE_WARNING, err->T("textures.ini filenames may not be cross - platform(banned characters)"), badFilenames, 6.0f);
 		WARN_LOG(Log::TexReplacement, "Potentially bad filenames: %s", badFilenames.c_str());
+	}
+
+
+	if (ini.HasSection("animations")) {
+		const Section *animationsSection = ini.GetOrCreateSection("animations");
+		for (const auto &line : animationsSection->Lines()) {
+			if (line.Key().empty() || line.Value().empty())
+				continue;
+
+			ReplacementCacheKey key(0, 0);
+			char k[128];
+			truncate_cpy(k, line.Key());
+			if (sscanf(k, "%16llx%8x", &key.cachekey, &key.hash) < 1) {
+				ERROR_LOG(Log::TexReplacement, "Unsupported syntax under [animations], ignoring: %s", k);
+				continue;
+			}
+
+			std::string path(line.Value());
+			if (HasParentDirComponent(path) || !dir) {
+				ERROR_LOG(Log::TexReplacement, "Invalid animation path: %s", path.c_str());
+				continue;
+			}
+
+			TextureAnimation animation;
+			if (!BuildAnimationFrames(dir, path, &animation.filenames)) {
+				ERROR_LOG(Log::TexReplacement, "Animation directory '%s' has no sequential PNG frames (0.png, 1.png, ...)", path.c_str());
+				continue;
+			}
+
+			animations_[key] = std::move(animation);
+			INFO_LOG(Log::TexReplacement, "Registered animated texture %s: %zu frames from '%s' at %.1f FPS",
+				k, animations_[key].filenames.size(), path.c_str(), animationFPS_);
+		}
 	}
 
 	if (ini.HasSection("hashranges")) {
@@ -555,6 +595,26 @@ void TextureReplacer::ParseReduceHashRange(const std::string& key, const std::st
 	reducehashranges_[reducerangeKey] = rhashvalue;
 }
 
+
+bool TextureReplacer::BuildAnimationFrames(VFSBackend *dir, const std::string &path, std::vector<std::string> *frames) {
+	frames->clear();
+	for (int frame = 0; frame < 1000000; ++frame) {
+		std::string filename = StringFromFormat("%s/%d.png", path.c_str(), frame);
+		if (!dir->GetFileInfo(filename).exists)
+			break;
+		frames->push_back(filename);
+	}
+	return !frames->empty();
+}
+
+const TextureAnimation *TextureReplacer::FindAnimation(ReplacementCacheKey key) const {
+	ReplacementCacheKey lookupKey = key;
+	if (ignoreAddress_)
+		lookupKey.ZeroAddress();
+	auto it = animations_.find(lookupKey);
+	return it != animations_.end() ? &it->second : nullptr;
+}
+
 u32 TextureReplacer::ComputeHash(u32 addr, int bufw, int w, int h, bool swizzled, GETextureFormat fmt, u16 maxSeenV) {
 	_dbg_assert_msg_(replaceEnabled_ || saveEnabled_, "Replacement not enabled");
 
@@ -661,8 +721,9 @@ ReplacedTexture *TextureReplacer::FindReplacement(ReplacementCacheKey replacemen
 		return nullptr;
 	}
 
+	const TextureAnimation *animation = FindAnimation(replacementKey);
 	auto it = cache_.find(replacementKey);
-	if (it != cache_.end()) {
+	if (it != cache_.end() && !animation) {
 		return it->second.texture;
 	}
 
@@ -698,9 +759,18 @@ ReplacedTexture *TextureReplacer::FindReplacement(ReplacementCacheKey replacemen
 
 	FindFiltering(lookupKey, &desc.forceFiltering);
 
+	if (animation) {
+		int frameCount = (int)animation->filenames.size();
+		int frame = frameCount ? (int)((time_now_d() - animationStartTime_) * animationFPS_) % frameCount : 0;
+		hashfiles = animation->filenames[frame];
+		foundAlias = true;
+	}
 	if (foundAlias) {
 		desc.logId = hashfiles;
-		SplitString(hashfiles, '|', desc.filenames);
+		if (animation)
+			desc.filenames.push_back(hashfiles);
+		else
+			SplitString(hashfiles, '|', desc.filenames);
 		desc.hashfiles = hashfiles;
 	} else {
 		DEBUG_LOG(Log::TexReplacement, "Replacement not found in alias list - skipping!");
@@ -810,6 +880,13 @@ bool TextureReplacer::WillSave(const ReplacedTextureDecodeInfo &replacedInfo) co
 		return false;
 
 	return true;
+}
+
+bool TextureReplacer::IsAnimationFrameChanged(ReplacementCacheKey key, ReplacedTexture *current, int w, int h) {
+	if (!FindAnimation(key))
+		return false;
+	ReplacedTexture *next = FindReplacement(key, w, h);
+	return next && next != current && next->State() == ReplacementState::ACTIVE;
 }
 
 void TextureReplacer::NotifyTextureDecoded(ReplacedTexture *texture, const ReplacedTextureDecodeInfo &replacedInfo, const void *data, int srcPitch, int level, int origW, int origH, int scaledW, int scaledH) {
