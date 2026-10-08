@@ -22,6 +22,7 @@
 #include "Common/GPU/thin3d.h"
 
 struct FShaderID;
+struct VShaderID;
 
 // Can technically be deduced from the fragment shader ID, but this is safer.
 enum class FragmentShaderFlags : u32 {
@@ -30,4 +31,4 @@ enum class FragmentShaderFlags : u32 {
 };
 ENUM_CLASS_BITOPS(FragmentShaderFlags);
 
-bool GenerateFragmentShader(const FShaderID &id, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint64_t *uniformMask, FragmentShaderFlags *fragmentShaderFlags, std::string *errorString);
+bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, char *buffer, const ShaderLanguageDesc &compat, Draw::Bugs bugs, uint64_t *uniformMask, FragmentShaderFlags *fragmentShaderFlags, std::string *errorString);
