@@ -619,6 +619,14 @@ TextureApplyResult TextureCacheCommon::ApplyTexture(bool doBind) {
 			reason = "clutgpu";
 		}
 
+		if (match && entry->replacedTexture && entry->replacedTexture->State() == ReplacementState::ACTIVE) {
+			ReplacementCacheKey replacementKey(entry->CacheKey(), entry->fullhash);
+			if (replacer_.IsAnimationFrameChanged(replacementKey, entry->replacedTexture, w, h)) {
+				match = false;
+				reason = "animation";
+			}
+		}
+
 		// Check for FBO changes.
 		if (entry->status & TexStatus::FRAMEBUFFER_OVERLAP) {
 			// Fall through to the end where we'll delete the entry if there's a framebuffer.
