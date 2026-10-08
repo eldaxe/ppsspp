@@ -494,10 +494,11 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 
 static Image g_cachedUIAtlasImage;
 static float g_cachedDpiScale = 0.0f;
+static int g_cachedTouchAtlasScale = -1;
 
 // The caller must cache the Atlas.
 Draw::Texture *GenerateUIAtlas(Draw::DrawContext *draw, Atlas *atlas, float dpiScale, bool invalidate) {
-	if (g_cachedUIAtlasImage.IsEmpty() || dpiScale != g_cachedDpiScale || invalidate) {
+	if (g_cachedUIAtlasImage.IsEmpty() || dpiScale != g_cachedDpiScale || g_Config.iTouchButtonAtlasScale != g_cachedTouchAtlasScale || invalidate) {
 		INFO_LOG(Log::G3D, "Regenerating atlas (empty: %s). Dpi scale (changed: %s): %0.2f (invalidate=%d)",
 			g_cachedUIAtlasImage.IsEmpty() ? "true" : "false", dpiScale != g_cachedDpiScale ? "true" : "false", dpiScale, invalidate);
 
@@ -509,6 +510,7 @@ Draw::Texture *GenerateUIAtlas(Draw::DrawContext *draw, Atlas *atlas, float dpiS
 	}
 
 	g_cachedDpiScale = dpiScale;
+	g_cachedTouchAtlasScale = g_Config.iTouchButtonAtlasScale;
 
 	// Create the texture.
 	Draw::TextureDesc desc{};
