@@ -843,7 +843,8 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		style->SetEnabledPtr(&g_Config.bShowTouchControls);
 
 		static const char *touchAtlasScales[] = { "1x (Default)", "2x", "4x", "8x" };
-		View *atlasScale = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonAtlasScale, co->T("Touch button SVG quality"), touchAtlasScales, 0, ARRAY_SIZE(touchAtlasScales), I18NCat::CONTROLS, screenManager()));
+		PopupMultiChoice *atlasScale = new PopupMultiChoice(&g_Config.iTouchButtonAtlasScale, co->T("Touch button SVG quality"), touchAtlasScales, 0, ARRAY_SIZE(touchAtlasScales), I18NCat::CONTROLS, screenManager());
+		controlsSettings->Add(atlasScale);
 		atlasScale->SetEnabledPtr(&g_Config.bShowTouchControls);
 		atlasScale->OnChoice.Add([this](UI::EventParams &e) {
 			screenManager()->getUIContext()->InvalidateAtlas();
