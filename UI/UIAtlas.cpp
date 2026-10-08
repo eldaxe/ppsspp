@@ -387,7 +387,7 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, float touchScaleM
 	const float touchDpiScale = dpiScale * touchScaleMultiplier;
 	Path customButtons = GetSysDirectory(DIRECTORY_SYSTEM) / "buttons.svg";
 	const char *buttonsSVG = File::Exists(customButtons) ? customButtons.c_str() : "ui_images/buttons.svg";
-	INFO_LOG(Log::G3D, "Touch button SVG quality: %dx (base scale %.2f, requested raster scale %.2f)", (int)kTouchAtlasMultipliers[quality], dpiScale, touchDpiScale);
+	INFO_LOG(Log::G3D, "Touch button SVG quality: %.0fx (base scale %.2f, requested raster scale %.2f)", touchScaleMultiplier, dpiScale, touchDpiScale);
 	if (!RasterizeSVG(buttonsSVG, touchDpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
 		return false;
 	}
