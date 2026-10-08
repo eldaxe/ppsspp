@@ -105,7 +105,25 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 	ShaderWriter p(buffer, compat, ShaderStage::Fragment, extensions, flags);
 	p.C("// %").W(id.Description()).endl();
 	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && linkedVSID) {
+		const bool linkedVSMode1 = LegacyPBRVertexMode1(
+			linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
+			linkedVSID->Bit(VS_BIT_HAS_NORMAL),
+			linkedVSID->Bit(VS_BIT_HAS_TEXCOORD) || !linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
+			linkedVSID->Bit(VS_BIT_LIGHTING_ENABLE),
+			linkedVSID->Bit(VS_BIT_VERTEX_RANGE_CULLING));
+		const bool linkedVSMode2 = LegacyPBRVertexMode2(
+			linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
+			linkedVSID->Bit(VS_BIT_HAS_TEXCOORD) || !linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
+			linkedVSID->Bit(VS_BIT_LIGHTING_ENABLE),
+			linkedVSID->Bit(VS_BIT_VERTEX_RANGE_CULLING));
 		p.F("// Used by vertex%016llx.glsl\\n", (unsigned long long)linkedVSID->ToUint64());
+		p.F("// Linked vertex shader ID: %016llx\\n", (unsigned long long)linkedVSID->ToUint64());
+		if (linkedVSMode1)
+			p.C("// Legacy PBR vertex mode: 1 (fragment flag 1 is valid)\\n");
+		else if (linkedVSMode2)
+			p.C("// Legacy PBR vertex mode: 2 (fragment flag 2; PBR path inactive)\\n");
+		else
+			p.C("// Legacy PBR vertex mode: none (fragment PBR must remain inactive)\\n");
 	}
 
 	p.ApplySamplerMetadata(arrayTexture ? samplersStereo : samplersMono);
