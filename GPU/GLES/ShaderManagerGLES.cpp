@@ -625,7 +625,7 @@ void ShaderManagerGLES::DeviceRestore(Draw::DrawContext *draw) {
 
 // Can only fail by failing to generate the code (bad FSID).
 // Any actual failures driver-side happens later in the render manager.
-Shader *ShaderManagerGLES::CompileFragmentShader(FShaderID FSID) {
+Shader *ShaderManagerGLES::CompileFragmentShader(FShaderID FSID, VShaderID VSID) {
 	uint64_t uniformMask;
 	std::string errorString;
 	FragmentShaderFlags flags;
@@ -738,7 +738,7 @@ LinkedShader *ShaderManagerGLES::ApplyFragmentShader(VShaderID VSID, Shader *vs,
 		// Fragment shader not in cache. Let's compile it.
 		// Can't really tell if we succeeded since the compile is on the GPU thread later.
 		// Could fail to generate, in which case we're kinda screwed.
-		fs = CompileFragmentShader(FSID);
+		fs = CompileFragmentShader(FSID, VSID);
 		if (!fs) {
 			ERROR_LOG(Log::G3D, "Failed to generate fragment shader with ID %s", FSID.ToDebugString().c_str());
 			// Still insert it so we don't end up spamming generation.
