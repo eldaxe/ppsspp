@@ -260,7 +260,7 @@ const VulkanFragmentShader *ShaderManagerVulkan::GetFragmentShaderFromID(FShader
 	std::string genErrorString;
 	uint64_t uniformMask = 0;  // Not used
 	FragmentShaderFlags flags{};
-	bool success = GenerateFragmentShader(FSID, codeBuffer_, compat_, draw_->GetBugs(), &uniformMask, &flags, &genErrorString);
+	bool success = GenerateFragmentShader(FSID, nullptr, codeBuffer_, compat_, draw_->GetBugs(), &uniformMask, &flags, &genErrorString);
 	_assert_msg_(success, "FS gen error: %s", genErrorString.c_str());
 	_assert_msg_(strlen(codeBuffer_) < CODE_BUFFER_SIZE, "FS length error: %d", (int)strlen(codeBuffer_));
 
@@ -457,7 +457,7 @@ bool ShaderManagerVulkan::LoadCache(FILE *f) {
 		std::string genErrorString;
 		uint64_t uniformMask = 0;
 		FragmentShaderFlags flags;
-		if (!GenerateFragmentShader(id, codeBuffer_, compat_, draw_->GetBugs(), &uniformMask, &flags, &genErrorString)) {
+		if (!GenerateFragmentShader(id, nullptr, codeBuffer_, compat_, draw_->GetBugs(), &uniformMask, &flags, &genErrorString)) {
 			ERROR_LOG(Log::G3D, "Failed to generate fragment shader during cache load");
 			// We just ignore this one and carry on.
 			failCount++;
