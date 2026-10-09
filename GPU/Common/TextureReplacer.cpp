@@ -613,7 +613,12 @@ const TextureAnimation *TextureReplacer::FindAnimation(ReplacementCacheKey key) 
 	if (ignoreAddress_)
 		lookupKey.ZeroAddress();
 	auto it = animations_.find(lookupKey);
-	return it != animations_.end() ? &it->second : nullptr;
+	bool found = it != animations_.end();
+	DEBUG_LOG(Log::TexReplacement,
+		"FindAnimation: key=%016llx%08x lookup=%016llx%08x ignoreAddress=%d found=%d frames=%zu",
+		key.cachekey, key.hash, lookupKey.cachekey, lookupKey.hash, (int)ignoreAddress_,
+		(int)found, found ? it->second.filenames.size() : 0);
+	return found ? &it->second : nullptr;
 }
 
 u32 TextureReplacer::ComputeHash(u32 addr, int bufw, int w, int h, bool swizzled, GETextureFormat fmt, u16 maxSeenV) {
@@ -884,10 +889,24 @@ bool TextureReplacer::WillSave(const ReplacedTextureDecodeInfo &replacedInfo) co
 }
 
 bool TextureReplacer::IsAnimationFrameChanged(ReplacementCacheKey key, ReplacedTexture *current, int w, int h) {
-	if (!FindAnimation(key))
+	const TextureAnimation *animation = FindAnimation(key);
+	if (!animation) {
+		DEBUG_LOG(Log::TexReplacement,
+			"IsAnimationFrameChanged: no animation for key=%016llx%08x size=%dx%d",
+			key.cachekey, key.hash, w, h);
 		return false;
+	}
+
 	ReplacedTexture *next = FindReplacement(key, w, h);
-	return next && next != current && next->State() == ReplacementState::ACTIVE;
+	bool hasNext = next != nullptr;
+	bool sameTexture = next == current;
+	bool active = hasNext && next->State() == ReplacementState::ACTIVE;
+	bool changed = hasNext && !sameTexture && active;
+	DEBUG_LOG(Log::TexReplacement,
+		"IsAnimationFrameChanged: key=%016llx%08x size=%dx%d frames=%zu hasNext=%d sameTexture=%d active=%d changed=%d",
+		key.cachekey, key.hash, w, h, animation->filenames.size(), (int)hasNext,
+		(int)sameTexture, (int)active, (int)changed);
+	return changed;
 }
 
 void TextureReplacer::NotifyTextureDecoded(ReplacedTexture *texture, const ReplacedTextureDecodeInfo &replacedInfo, const void *data, int srcPitch, int level, int origW, int origH, int scaledW, int scaledH) {
