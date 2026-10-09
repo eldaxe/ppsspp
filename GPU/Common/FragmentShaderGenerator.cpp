@@ -1193,7 +1193,11 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		break;
 
 	case REPLACE_ALPHA_NO:
-		WRITE(p, "  %s = legacyPBRActive ? legacyPBRColor : v;\n", compat.fragColor0);
+		if (legacyPBRFragmentBase) {
+			WRITE(p, "  %s = legacyPBRActive ? legacyPBRColor : v;\n", compat.fragColor0);
+		} else {
+			WRITE(p, "  %s = v;\n", compat.fragColor0);
+		}
 		break;
 
 	default:
