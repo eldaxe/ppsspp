@@ -169,9 +169,9 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	const bool legacyPBRVertexMode2 = LegacyPBRVertexMode2(useHWTransform, hasTexcoord, enableLighting, rangeCulling);
 	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 		if (legacyPBRVertexMode1)
-			p.C("// Legacy PBR vertex mode: 1 (exports flag 1 + v_1..v_8)\\n");
+			p.C("// Legacy PBR vertex mode: 1 (exports flag 1 + v_1..v_8)\n");
 		else if (legacyPBRVertexMode2)
-			p.C("// Legacy PBR vertex mode: 2 (exports flag 2 + v_1..v_8)\\n");
+			p.C("// Legacy PBR vertex mode: 2 (exports flag 2 + v_1..v_8)\n");
 	}
 
 	const char *minZClipPlaneSuffix = "[0]";
