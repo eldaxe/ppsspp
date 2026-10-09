@@ -458,7 +458,6 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
 			WRITE(p, "//****** my_varying_fs *********\n");
 			WriteLegacyPBRVaryingFS(p, shading, compat.varying_fs);
-			WriteLegacyPBRPrelude(p);
 		}
 
 		if (!enableFragmentTestCache) {
@@ -494,6 +493,10 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 			} else {
 				WRITE(p, "%s vec4 fragColor0;\n", qualifierColor0);
 			}
+		}
+		// Emit PBR functions after fragment output declarations, since PBR__2_0 writes fragColor0.
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
+			WriteLegacyPBRPrelude(p);
 		}
 	}
 
