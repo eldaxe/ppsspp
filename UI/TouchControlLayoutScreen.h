@@ -44,4 +44,6 @@ protected:
 private:
 	UI::ChoiceStrip *mode_ = nullptr;
 	ControlLayoutView *layoutView_ = nullptr;
+	bool setSizeMode_ = false;
+	int selectedMode_ = 0;
 };
