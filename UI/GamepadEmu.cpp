@@ -541,12 +541,29 @@ void PSPStick::Draw(UIContext &dc) {
 
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 
+	// The analog background and head use circular artwork. When circular range
+	// is enabled, keep the rendered head on the same circular path as touch input.
+	// The travel radius is 3/8 of the background diameter.
+	const float headTravel = 0.75f * stick_size_ * scale_;
+	if (g_Config.bTouchAnalogCircleRange) {
+		const float headDistance = sqrtf(dx * dx + dy * dy);
+		if (headDistance > 1.0f) {
+			dx /= headDistance;
+			dy /= headDistance;
+		}
+	} else {
+		// Preserve the legacy square travel when the option is disabled.
+		dx = std::clamp(dx, -1.0f, 1.0f);
+		dy = std::clamp(dy, -1.0f, 1.0f);
+	}
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
 	float headScale = stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale;
+	const float headX = stickX + dx * headTravel;
+	const float headY = stickY - dy * headTravel;
 	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 2 && stickDownImg_ != stickImageIndex_)
-		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
-	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(stickDownImg_, headX, headY, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
+	dc.Draw()->DrawImage(stickImageIndex_, headX, headY, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
 }
 
 bool PSPStick::Touch(const TouchInput &input) {
@@ -568,7 +585,17 @@ bool PSPStick::Touch(const TouchInput &input) {
 	if (input.flags & TouchInputFlags::DOWN) {
 		const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 		float fac = 0.5f * (stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale)-0.5f;
-		if (dragPointerId_ == -1 && bounds_.Expand(bounds_.w*fac, bounds_.h*fac).Contains(input.x, input.y)) {
+		bool insideTouchRange = bounds_.Expand(bounds_.w * fac, bounds_.h * fac).Contains(input.x, input.y);
+		if (insideTouchRange && g_Config.bTouchAnalogCircleRange) {
+			// Use a circular hit area too; otherwise the square bounds still let
+			// touches begin in the corners even when circular range is enabled.
+			const float radiusX = bounds_.w * (0.5f + fac);
+			const float radiusY = bounds_.h * (0.5f + fac);
+			const float dx = (input.x - bounds_.centerX()) / radiusX;
+			const float dy = (input.y - bounds_.centerY()) / radiusY;
+			insideTouchRange = dx * dx + dy * dy <= 1.0f;
+		}
+		if (dragPointerId_ == -1 && insideTouchRange) {
 			if (g_Config.bAutoCenterTouchAnalog) {
 				centerX_ = input.x;
 				centerY_ = input.y;
@@ -610,18 +637,20 @@ void PSPStick::ProcessTouch(float x, float y, bool down) {
 		float dx = (x - centerX_) * inv_stick_size;
 		float dy = (y - centerY_) * inv_stick_size;
 		rotateTouchHelper(dx, dy);
-		// Do not clamp to a circle! The PSP has nearly square range!
 
-		// Old code to clamp to a circle
-		// float len = sqrtf(dx * dx + dy * dy);
-		// if (len > 1.0f) {
-		//	dx /= len;
-		//	dy /= len;
-		//}
-
-		// Still need to clamp to a square
-		dx = std::min(1.0f, std::max(-1.0f, dx));
-		dy = std::min(1.0f, std::max(-1.0f, dy));
+		if (g_Config.bTouchAnalogCircleRange) {
+			// Optional circular range for touch controls. Keep the default PSP
+			// range square, since the physical analog stick has a nearly square range.
+			const float distance = sqrtf(dx * dx + dy * dy);
+			if (distance > 1.0f) {
+				dx /= distance;
+				dy /= distance;
+			}
+		} else {
+			// Preserve the original square range when Analog Circle Range is disabled.
+			dx = std::min(1.0f, std::max(-1.0f, dx));
+			dy = std::min(1.0f, std::max(-1.0f, dy));
+		}
 
 		__CtrlSetAnalogXY(stick_, dx, -dy);
 	} else {
@@ -659,11 +688,25 @@ void PSPCustomStick::Draw(UIContext &dc) {
 
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 	const float headScale = config.fRightStickHeadScale;
+	if (g_Config.bTouchAnalogCircleRange) {
+		// Keep custom right-stick artwork on the same circular travel path.
+		const float headDistance = sqrtf(dx * dx + dy * dy);
+		if (headDistance > 1.0f) {
+			dx /= headDistance;
+			dy /= headDistance;
+		}
+	} else {
+		dx = std::clamp(dx, -1.0f, 1.0f);
+		dy = std::clamp(dy, -1.0f, 1.0f);
+	}
+	// Base travel on the actual custom control bounds, which may have been resized.
+	// 3/8 of the background diameter is 3/4 of its radius.
+	const float headTravel = 0.375f * std::min(bounds_.w, bounds_.h);
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
 	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 2 && stickDownImg_ != stickImageIndex_)
-		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
-	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * headTravel, stickY - dy * headTravel, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
+	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * headTravel, stickY - dy * headTravel, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
 }
 
 bool PSPCustomStick::Touch(const TouchInput &input) {
@@ -685,7 +728,16 @@ bool PSPCustomStick::Touch(const TouchInput &input) {
 	if (input.flags & TouchInputFlags::DOWN) {
 		const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 		float fac = 0.5f * config.fRightStickHeadScale - 0.5f;
-		if (dragPointerId_ == -1 && bounds_.Expand(bounds_.w*fac, bounds_.h*fac).Contains(input.x, input.y)) {
+		bool insideTouchRange = bounds_.Expand(bounds_.w * fac, bounds_.h * fac).Contains(input.x, input.y);
+		if (insideTouchRange && g_Config.bTouchAnalogCircleRange) {
+			// Match the circular input area to the visible custom analog range.
+			const float radiusX = bounds_.w * (0.5f + fac);
+			const float radiusY = bounds_.h * (0.5f + fac);
+			const float dx = (input.x - bounds_.centerX()) / radiusX;
+			const float dy = (input.y - bounds_.centerY()) / radiusY;
+			insideTouchRange = dx * dx + dy * dy <= 1.0f;
+		}
+		if (dragPointerId_ == -1 && insideTouchRange) {
 			if (g_Config.bAutoCenterTouchAnalog) {
 				centerX_ = input.x;
 				centerY_ = input.y;
@@ -807,8 +859,18 @@ void PSPCustomStick::ProcessTouch(float x, float y, bool down) {
 		float dx = (x - centerX_) * inv_stick_size;
 		float dy = (y - centerY_) * inv_stick_size;
 
-		dx = std::min(1.0f, std::max(-1.0f, dx));
-		dy = std::min(1.0f, std::max(-1.0f, dy));
+		if (g_Config.bTouchAnalogCircleRange) {
+			// Clamp custom right-analog input to a circle, not a square.
+			const float distance = sqrtf(dx * dx + dy * dy);
+			if (distance > 1.0f) {
+				dx /= distance;
+				dy /= distance;
+			}
+		} else {
+			// Preserve the original square range when the option is disabled.
+			dx = std::min(1.0f, std::max(-1.0f, dx));
+			dy = std::min(1.0f, std::max(-1.0f, dy));
+		}
 
 		toggle(g_Config.iRightAnalogRight, dx > 0.5f, fabs(dx) > fabs(dy));
 		toggle(g_Config.iRightAnalogLeft, dx < -0.5f, fabs(dx) > fabs(dy));
