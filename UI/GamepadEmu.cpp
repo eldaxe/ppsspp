@@ -621,12 +621,18 @@ void PSPStick::ProcessTouch(float x, float y, bool down) {
 		float dy = (y - centerY_) * inv_stick_size;
 		rotateTouchHelper(dx, dy);
 
-		// A circular touch range avoids the square-feeling corners of the
-		// on-screen analog. Normalize only when outside the unit circle.
-		const float distance = sqrtf(dx * dx + dy * dy);
-		if (distance > 1.0f) {
-			dx /= distance;
-			dy /= distance;
+		if (g_Config.bTouchAnalogCircleRange) {
+			// Optional circular range for touch controls. Keep the default PSP
+			// range square, since the physical analog stick has a nearly square range.
+			const float distance = sqrtf(dx * dx + dy * dy);
+			if (distance > 1.0f) {
+				dx /= distance;
+				dy /= distance;
+			}
+		} else {
+			// Preserve the original square range when Analog Circle Range is disabled.
+			dx = std::min(1.0f, std::max(-1.0f, dx));
+			dy = std::min(1.0f, std::max(-1.0f, dy));
 		}
 
 		__CtrlSetAnalogXY(stick_, dx, -dy);
