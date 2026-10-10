@@ -105,15 +105,15 @@ static const char *g_debugOverlayList[] = {
 	"GPU Profile",
 	"GPU Allocator Viewer",
 	"Framebuffer list",
+	"Log View",
 };
 
 void AddOverlayList(UI::ViewGroup *items, ScreenManager *screenManager) {
 	using namespace UI;
 	auto dev = GetI18NCategory(I18NCat::DEVELOPER);
+	// Keep Log View available on every backend. GPU-only entries remain in the list
+	// to preserve the enum-to-choice index mapping used by saved configuration.
 	int numOverlays = ARRAY_SIZE(g_debugOverlayList);
-	if (!(g_Config.iGPUBackend == (int)GPUBackend::VULKAN || g_Config.iGPUBackend == (int)GPUBackend::OPENGL)) {
-		numOverlays -= 2;  // skip the last 2.
-	}
 	items->Add(new PopupMultiChoice((int *)&g_Config.iDebugOverlay, dev->T("Debug overlay"), g_debugOverlayList, 0, numOverlays, I18NCat::DEVELOPER, screenManager));
 }
 
