@@ -578,7 +578,17 @@ bool PSPStick::Touch(const TouchInput &input) {
 	if (input.flags & TouchInputFlags::DOWN) {
 		const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 		float fac = 0.5f * (stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale)-0.5f;
-		if (dragPointerId_ == -1 && bounds_.Expand(bounds_.w*fac, bounds_.h*fac).Contains(input.x, input.y)) {
+		bool insideTouchRange = bounds_.Expand(bounds_.w * fac, bounds_.h * fac).Contains(input.x, input.y);
+		if (insideTouchRange && g_Config.bTouchAnalogCircleRange) {
+			// Use a circular hit area too; otherwise the square bounds still let
+			// touches begin in the corners even when circular range is enabled.
+			const float radiusX = bounds_.w * (0.5f + fac);
+			const float radiusY = bounds_.h * (0.5f + fac);
+			const float dx = (input.x - bounds_.centerX()) / radiusX;
+			const float dy = (input.y - bounds_.centerY()) / radiusY;
+			insideTouchRange = dx * dx + dy * dy <= 1.0f;
+		}
+		if (dragPointerId_ == -1 && insideTouchRange) {
 			if (g_Config.bAutoCenterTouchAnalog) {
 				centerX_ = input.x;
 				centerY_ = input.y;
