@@ -842,6 +842,14 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		View *style = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonStyle, co->T("Button style"), touchControlStyles, 0, ARRAY_SIZE(touchControlStyles), I18NCat::CONTROLS, screenManager()));
 		style->SetEnabledPtr(&g_Config.bShowTouchControls);
 
+		static const char *touchAtlasScales[] = { "1x (Default)", "2x", "4x", "8x" };
+		PopupMultiChoice *atlasScale = new PopupMultiChoice(&g_Config.iTouchButtonAtlasScale, co->T("Touch button SVG quality"), touchAtlasScales, 0, ARRAY_SIZE(touchAtlasScales), I18NCat::CONTROLS, screenManager());
+		controlsSettings->Add(atlasScale);
+		atlasScale->SetEnabledPtr(&g_Config.bShowTouchControls);
+		atlasScale->OnChoice.Add([this](UI::EventParams &e) {
+			screenManager()->getUIContext()->InvalidateAtlas();
+		});
+
 		PopupSliderChoice *opacity = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 0, 100, 65, co->T("Button Opacity"), screenManager(), "%"));
 		opacity->SetEnabledPtr(&g_Config.bShowTouchControls);
 		opacity->SetFormat("%i%%");
