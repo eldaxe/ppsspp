@@ -541,13 +541,20 @@ void PSPStick::Draw(UIContext &dc) {
 
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 
-	// Keep the visual stick head within a circular travel area. The requested
-	// travel radius is 3/8 of the stick background's diameter.
+	// The analog background and head use circular artwork. When circular range
+	// is enabled, keep the rendered head on the same circular path as touch input.
+	// The travel radius is 3/8 of the background diameter.
 	const float headTravel = 0.75f * stick_size_ * scale_;
-	const float headDistance = sqrtf(dx * dx + dy * dy);
-	if (headDistance > 1.0f) {
-		dx /= headDistance;
-		dy /= headDistance;
+	if (g_Config.bTouchAnalogCircleRange) {
+		const float headDistance = sqrtf(dx * dx + dy * dy);
+		if (headDistance > 1.0f) {
+			dx /= headDistance;
+			dy /= headDistance;
+		}
+	} else {
+		// Preserve the legacy square travel when the option is disabled.
+		dx = std::clamp(dx, -1.0f, 1.0f);
+		dy = std::clamp(dy, -1.0f, 1.0f);
 	}
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
@@ -681,11 +688,23 @@ void PSPCustomStick::Draw(UIContext &dc) {
 
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 	const float headScale = config.fRightStickHeadScale;
+	if (g_Config.bTouchAnalogCircleRange) {
+		// Keep custom right-stick artwork on the same circular travel path.
+		const float headDistance = sqrtf(dx * dx + dy * dy);
+		if (headDistance > 1.0f) {
+			dx /= headDistance;
+			dy /= headDistance;
+		}
+	} else {
+		dx = std::clamp(dx, -1.0f, 1.0f);
+		dy = std::clamp(dy, -1.0f, 1.0f);
+	}
+	const float headTravel = 0.75f * stick_size_ * scale_;
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
 	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 2 && stickDownImg_ != stickImageIndex_)
-		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
-	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * headTravel, stickY - dy * headTravel, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
+	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * headTravel, stickY - dy * headTravel, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
 }
 
 bool PSPCustomStick::Touch(const TouchInput &input) {
