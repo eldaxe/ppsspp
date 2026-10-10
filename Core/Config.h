@@ -489,6 +489,7 @@ public:
 
 	// Controls Visibility
 	bool bShowTouchControls = false;
+	bool bTouchAnalogCircleRange = false;  // Restrict touch analog input to a circular range.
 
 	// Disable diagonals
 	bool bDisableDpadDiagonals;
