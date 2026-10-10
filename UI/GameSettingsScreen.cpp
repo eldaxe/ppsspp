@@ -838,13 +838,28 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		});
 		gesture->SetEnabledPtr(&g_Config.bShowTouchControls);
 
-		static const char *touchControlStyles[] = { "Classic", "Thin borders", "Glowing borders" };
+		static const char *touchControlStyles[] = { "Classic", "Border" };
 		View *style = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonStyle, co->T("Button style"), touchControlStyles, 0, ARRAY_SIZE(touchControlStyles), I18NCat::CONTROLS, screenManager()));
 		style->SetEnabledPtr(&g_Config.bShowTouchControls);
+
+		static const char *touchButtonPressedStyles[] = { "Glow", "Enlarge", "Shrink", "Ripple" };
+		View *pressedStyle = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonPressedStyle, co->T("Button pressed style"), touchButtonPressedStyles, 0, ARRAY_SIZE(touchButtonPressedStyles), I18NCat::CONTROLS, screenManager()));
+		pressedStyle->SetEnabledPtr(&g_Config.bShowTouchControls);
 
 		PopupSliderChoice *opacity = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 0, 100, 65, co->T("Button Opacity"), screenManager(), "%"));
 		opacity->SetEnabledPtr(&g_Config.bShowTouchControls);
 		opacity->SetFormat("%i%%");
+
+		PopupSliderChoice *surfaceAlpha = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonSurfaceAlpha, 0, 100, 25, co->T("Button fill opacity"), screenManager(), "%"));
+		surfaceAlpha->SetEnabledPtr(&g_Config.bShowTouchControls);
+		surfaceAlpha->SetFormat("%i%%");
+
+		PopupSliderChoice *enlargeScale = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonEnlargePercent, 100, 500, 150, co->T("Enlarge size"), screenManager(), "%"));
+		enlargeScale->SetFormat("%i%%");
+		enlargeScale->SetEnabledFunc([] { return g_Config.bShowTouchControls && g_Config.iTouchButtonPressedStyle == 1; });
+		PopupSliderChoice *shrinkScale = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonShrinkPercent, 1, 100, 67, co->T("Shrink size"), screenManager(), "%"));
+		shrinkScale->SetFormat("%i%%");
+		shrinkScale->SetEnabledFunc([] { return g_Config.bShowTouchControls && g_Config.iTouchButtonPressedStyle == 2; });
 		PopupSliderChoice *autoHide = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonHideSeconds, 0, 300, 20, co->T("Auto-hide buttons after delay"), screenManager(), di->T("seconds, 0:off")));
 		autoHide->SetEnabledPtr(&g_Config.bShowTouchControls);
 		autoHide->SetFormat(di->T("%d seconds"));
