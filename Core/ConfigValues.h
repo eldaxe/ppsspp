@@ -282,6 +282,7 @@ enum class DebugOverlay : int {
 	GPU_PROFILE,
 	GPU_ALLOCATOR,
 	FRAMEBUFFER_LIST,
+	LOG_VIEW,
 };
 
 // Android-only for now
