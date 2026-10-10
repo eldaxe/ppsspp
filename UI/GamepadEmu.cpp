@@ -541,12 +541,22 @@ void PSPStick::Draw(UIContext &dc) {
 
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 
+	// Keep the visual stick head within a circular travel area. The requested
+	// travel radius is 3/8 of the stick background's diameter.
+	const float headTravel = 0.75f * stick_size_ * scale_;
+	const float headDistance = sqrtf(dx * dx + dy * dy);
+	if (headDistance > 1.0f) {
+		dx /= headDistance;
+		dy /= headDistance;
+	}
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
 	float headScale = stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale;
+	const float headX = stickX + dx * headTravel;
+	const float headY = stickY - dy * headTravel;
 	if (dragPointerId_ != -1 && g_Config.iTouchButtonStyle == 2 && stickDownImg_ != stickImageIndex_)
-		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
-	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(stickDownImg_, headX, headY, 1.0f * scale_ * headScale, downBg, ALIGN_CENTER);
+	dc.Draw()->DrawImage(stickImageIndex_, headX, headY, 1.0f * scale_ * headScale, colorBg, ALIGN_CENTER);
 }
 
 bool PSPStick::Touch(const TouchInput &input) {
@@ -610,18 +620,14 @@ void PSPStick::ProcessTouch(float x, float y, bool down) {
 		float dx = (x - centerX_) * inv_stick_size;
 		float dy = (y - centerY_) * inv_stick_size;
 		rotateTouchHelper(dx, dy);
-		// Do not clamp to a circle! The PSP has nearly square range!
 
-		// Old code to clamp to a circle
-		// float len = sqrtf(dx * dx + dy * dy);
-		// if (len > 1.0f) {
-		//	dx /= len;
-		//	dy /= len;
-		//}
-
-		// Still need to clamp to a square
-		dx = std::min(1.0f, std::max(-1.0f, dx));
-		dy = std::min(1.0f, std::max(-1.0f, dy));
+		// A circular touch range avoids the square-feeling corners of the
+		// on-screen analog. Normalize only when outside the unit circle.
+		const float distance = sqrtf(dx * dx + dy * dy);
+		if (distance > 1.0f) {
+			dx /= distance;
+			dy /= distance;
+		}
 
 		__CtrlSetAnalogXY(stick_, dx, -dy);
 	} else {
