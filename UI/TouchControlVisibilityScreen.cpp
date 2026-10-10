@@ -83,10 +83,6 @@ void TouchControlVisibilityScreen::CreateDialogViews(UI::ViewGroup *parent) {
 
 	TouchControlConfig &touch = g_Config.GetTouchControlsConfig(GetDeviceOrientation());
 
-	parent->Add(new ItemHeader(co->T("Analog")));
-	parent->Add(new CheckBox(&g_Config.bTouchAnalogCircleRange, co->T("Analog Circle Range"),
-		co->T("Restrict touch analog input to a circular range instead of the original square range.")));
-
 	toggles_.clear();
 	toggles_.push_back({ "Circle", &touch.bShowTouchCircle, ImageID("I_CIRCLE"), nullptr });
 	toggles_.push_back({ "Cross", &touch.bShowTouchCross, ImageID("I_CROSS"), nullptr });
