@@ -361,9 +361,11 @@ bool TextureReplacer::LoadIniValues(IniFile &ini, VFSBackend *dir, bool isOverri
 	}
 
 	if (ignoreAddress_ && textureHash_ == ReplacedTextureHash::QUICK) {
+		WARN_LOG(Log::TexReplacement, "Animation debug: ignoreAddress requested but disabled because hash=%s (requires xxh32 or xxh64).", hash.c_str());
 		ignoreAddress_ = false;
 		ERROR_LOG(Log::TexReplacement, "Texture Replacement: ignoreAddress option requires safer hash, use xxh32 or xxh64 instead.");
 	}
+	INFO_LOG(Log::TexReplacement, "Animation debug: options hash=%s ignoreAddress(effective)=%d animationFPS=%.1f", hash.c_str(), (int)ignoreAddress_, animationFPS_);
 
 	int version = 0;
 	if (options->Get("version", &version) && version > VERSION) {
@@ -455,20 +457,30 @@ bool TextureReplacer::LoadIniValues(IniFile &ini, VFSBackend *dir, bool isOverri
 			}
 
 			std::string path(line.Value());
+			INFO_LOG(Log::TexReplacement, "Animation debug: INI entry key='%s' parsed=%016llx%08x path='%s' ignoreAddress=%d",
+				k, key.cachekey, key.hash, path.c_str(), (int)ignoreAddress_);
 			if (HasParentDirComponent(path) || !dir) {
+				ERROR_LOG(Log::TexReplacement, "Animation debug: rejected path='%s' parentDir=%d dirAvailable=%d",
+					path.c_str(), (int)HasParentDirComponent(path), (int)(dir != nullptr));
 				ERROR_LOG(Log::TexReplacement, "Invalid animation path: %s", path.c_str());
 				continue;
 			}
 
 			TextureAnimation animation;
-			if (!BuildAnimationFrames(dir, path, &animation.filenames)) {
+			bool framesBuilt = BuildAnimationFrames(dir, path, &animation.filenames);
+			INFO_LOG(Log::TexReplacement, "Animation debug: BuildAnimationFrames path='%s' success=%d frameCount=%zu",
+				path.c_str(), (int)framesBuilt, animation.filenames.size());
+			if (!framesBuilt) {
 				ERROR_LOG(Log::TexReplacement, "Animation directory '%s' has no sequential PNG frames (0.png, 1.png, ...)", path.c_str());
 				continue;
 			}
 
-			animations_[key] = std::move(animation);
-			INFO_LOG(Log::TexReplacement, "Registered animated texture %s: %zu frames from '%s' at %.1f FPS",
-				k, animations_[key].filenames.size(), path.c_str(), animationFPS_);
+			if (ignoreAddress_)
+				key.ZeroAddress();
+			auto inserted = animations_.emplace(key, std::move(animation));
+			INFO_LOG(Log::TexReplacement, "Animation debug: registration key=%016llx%08x inserted=%d totalAnimations=%zu frameCount=%zu path='%s'",
+				key.cachekey, key.hash, (int)inserted.second, animations_.size(),
+				inserted.first->second.filenames.size(), path.c_str());
 		}
 	}
 
