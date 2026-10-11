@@ -21,6 +21,14 @@ $msbuild = "$installPath\MSBuild\Current\Bin\MSBuild.exe"
 
 (swap `/t:UnitTest` for `/t:PPSSPPWindows` or another project name as needed; drop it entirely to build the whole solution).
 
+On an ARM64 host, use `$installPath\MSBuild\Current\Bin\arm64\MSBuild.exe` instead. The MSBuild in
+`Bin\` itself runs emulated and picks the 32-bit x86-hosted compiler (`bin\HostX86\arm64\CL.exe`),
+which can't always map the precompiled headers into its address space. Builds then fail
+intermittently, every file of a project at line 1, with `C3859: Failed to create virtual memory for
+PCH` and `C1076: compiler limit: internal heap limit reached`. That looks like running out of
+memory, but lowering `/m` or `CL_MPCount` doesn't help, and `/p:PreferredToolArchitecture=arm64`
+has no effect. The build log's `CL.exe` path shows which host compiler ran.
+
 `<platform>` is `ARM64` or `x64` - whichever the machine actually is, so look it up rather than
 picking a default. The output directory follows it (`Windows\<platform>\<configuration>\`), which
 makes building one and running the other an easy mistake. It is easiest to make on Windows-on-ARM,
@@ -68,6 +76,15 @@ in that environment) but is very likely specific to that sandbox rather than a r
 bug, since CI runs the equivalent of `UnitTest.exe all` on every commit across multiple
 platforms without apparent issue. If `all`/`Jit` hangs in your environment, run every other
 test by name instead (skip `Jit`) to still get real coverage.
+
+## UWP build
+
+UWP has its own solution, `UWP\PPSSPP_UWP.sln`. Build the app with `/t:PPSSPP_UWP` (or a single
+library such as `/t:CoreUWP`), same MSBuild setup as above:
+
+```powershell
+& $msbuild "UWP\PPSSPP_UWP.sln" /t:PPSSPP_UWP /p:Configuration=Debug /p:Platform=<platform> /m
+```
 
 ## Android assets
 
@@ -193,6 +210,23 @@ binary, or it runs your native build instead. The full suite takes a couple of m
 
 qemu reports LSX and LASX as present, so CI only exercises the LoongArch vector paths.
 The scalar fallbacks never run here, so passing tells you nothing about them.
+
+Without a cross toolchain (on macOS, say) two things still help:
+
+- **A syntax check of the other JITs.** The RISC-V and LoongArch backends (`Core/MIPS/RiscV`,
+  `Core/MIPS/LoongArch64` and their emitters) have no architecture guards, so the host compiler can check
+  them: `clang++ -fsyntax-only` per file, with the `-I`/`-D`/`-std`/`-isystem` flags of any Core file from
+  `compile_commands.json`, plus `-I<repo> -I<repo>/ext -I<repo>/Common` (the database's include paths are
+  relative to the build directory). Check that a copy with a deliberate syntax error does report errors: zsh
+  doesn't word-split a `$FLAGS` variable, which once made a broken check look clean. This proves the code
+  compiles, nothing about its output.
+- **The portable software-renderer paths.** riscv64 and loongarch64 run the software renderer's non-SSE,
+  non-NEON C++ paths, so their test failures reproduce natively: wrap the two NEON defines in the
+  `__aarch64__` block of `ppsspp_config.h` in `#ifndef PPSSPP_TEST_NO_SIMD`, configure a separate
+  `build-nosimd` with `-DHEADLESS=ON` and `-DPPSSPP_TEST_NO_SIMD` in `CMAKE_C_FLAGS` and `CMAKE_CXX_FLAGS`,
+  and build `PPSSPPHeadless` there. Delete it and revert `ppsspp_config.h` afterwards, since `test.py` keeps
+  picking the newest binary. A failure that's the same on both architectures points at the portable path, not
+  the JITs.
 
 ## Quick rebuild on Linux
 

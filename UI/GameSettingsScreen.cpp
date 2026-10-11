@@ -758,7 +758,7 @@ void GameSettingsScreen::CreateAudioSettings(UI::ViewGroup *audioSettings) {
 #if PPSSPP_PLATFORM(ANDROID)
 	CheckBox *extraAudio = audioSettings->Add(new CheckBox(&g_Config.bExtraAudioBuffering, a->T("AudioBufferingForBluetooth", "Bluetooth-friendly buffer (slower)")));
 
-	// Show OpenSL debug info
+	// Show Oboe debug info
 	const std::string audioErrorStr = AndroidAudio_GetErrorString(g_audioState);
 	if (!audioErrorStr.empty()) {
 		audioSettings->Add(new InfoItem(a->T("Audio Error"), audioErrorStr));
@@ -769,7 +769,10 @@ void GameSettingsScreen::CreateAudioSettings(UI::ViewGroup *audioSettings) {
 	std::vector<std::string> micList = Microphone::getDeviceList();
 	if (!micList.empty()) {
 		audioSettings->Add(new ItemHeader(a->T("Microphone")));
-		PopupMultiChoiceDynamic *MicChoice = audioSettings->Add(new PopupMultiChoiceDynamic(&g_Config.sMicDevice, a->T("Microphone Device"), micList, I18NCat::NONE, screenManager()));
+		std::vector<std::string> micValues = micList;
+		micList.emplace(micList.begin(), a->T("Auto"));
+		micValues.insert(micValues.begin(), "");
+		PopupMultiChoiceDynamic *MicChoice = audioSettings->Add(new PopupMultiChoiceDynamic(&g_Config.sMicDevice, a->T("Microphone Device"), micList, I18NCat::NONE, screenManager(), &micValues));
 		MicChoice->OnChoice.Add([](UI::EventParams &e) {
 			Microphone::onMicDeviceChange();
 		});
@@ -838,13 +841,28 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		});
 		gesture->SetEnabledPtr(&g_Config.bShowTouchControls);
 
-		static const char *touchControlStyles[] = { "Classic", "Thin borders", "Glowing borders" };
+		static const char *touchControlStyles[] = { "Classic", "Border" };
 		View *style = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonStyle, co->T("Button style"), touchControlStyles, 0, ARRAY_SIZE(touchControlStyles), I18NCat::CONTROLS, screenManager()));
 		style->SetEnabledPtr(&g_Config.bShowTouchControls);
+
+		static const char *touchButtonPressedStyles[] = { "Glow", "Enlarge", "Shrink", "Ripple" };
+		View *pressedStyle = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonPressedStyle, co->T("Button pressed style"), touchButtonPressedStyles, 0, ARRAY_SIZE(touchButtonPressedStyles), I18NCat::CONTROLS, screenManager()));
+		pressedStyle->SetEnabledPtr(&g_Config.bShowTouchControls);
 
 		PopupSliderChoice *opacity = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 0, 100, 65, co->T("Button Opacity"), screenManager(), "%"));
 		opacity->SetEnabledPtr(&g_Config.bShowTouchControls);
 		opacity->SetFormat("%i%%");
+
+		PopupSliderChoice *surfaceAlpha = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonSurfaceAlpha, 0, 100, 25, co->T("Button fill opacity"), screenManager(), "%"));
+		surfaceAlpha->SetEnabledPtr(&g_Config.bShowTouchControls);
+		surfaceAlpha->SetFormat("%i%%");
+
+		PopupSliderChoice *enlargeScale = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonEnlargePercent, 100, 500, 150, co->T("Enlarge size"), screenManager(), "%"));
+		enlargeScale->SetFormat("%i%%");
+		enlargeScale->SetEnabledFunc([] { return g_Config.bShowTouchControls && g_Config.iTouchButtonPressedStyle == 1; });
+		PopupSliderChoice *shrinkScale = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonShrinkPercent, 1, 100, 67, co->T("Shrink size"), screenManager(), "%"));
+		shrinkScale->SetFormat("%i%%");
+		shrinkScale->SetEnabledFunc([] { return g_Config.bShowTouchControls && g_Config.iTouchButtonPressedStyle == 2; });
 		PopupSliderChoice *autoHide = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonHideSeconds, 0, 300, 20, co->T("Auto-hide buttons after delay"), screenManager(), di->T("seconds, 0:off")));
 		autoHide->SetEnabledPtr(&g_Config.bShowTouchControls);
 		autoHide->SetFormat(di->T("%d seconds"));
@@ -858,6 +876,11 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		// Hide stick background, useful when increasing the size
 		CheckBox *hideStickBackground = controlsSettings->Add(new CheckBox(&touch.bHideStickBackground, co->T("Hide touch analog stick background circle")));
 		hideStickBackground->SetEnabledPtr(&g_Config.bShowTouchControls);
+
+		// Optional circular input range for on-screen touch analog sticks.
+		CheckBox *analogCircleRange = controlsSettings->Add(new CheckBox(&g_Config.bTouchAnalogCircleRange, co->T("Analog Circle Range")));
+		analogCircleRange->SetEnabledPtr(&g_Config.bShowTouchControls);
+		controlsSettings->Add(new SettingHint(co->T("Restrict touch analog input to a circular range instead of the original square range."), analogCircleRange));
 
 		// Sticky D-pad.
 		CheckBox *stickyDpad = controlsSettings->Add(new CheckBox(&g_Config.bStickyTouchDPad, co->T("Sticky D-Pad")));

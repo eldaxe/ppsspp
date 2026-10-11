@@ -8,7 +8,7 @@
 
 using namespace PPSSPP_VK;
 
-// Debug help: adb logcat -s DEBUG AndroidRuntime PPSSPPNativeActivity PPSSPP NativeGLView NativeRenderer NativeSurfaceView PowerSaveModeReceiver InputDeviceState PpssppActivity CameraHelper PPSSPPSizeManager
+// Debug help: adb logcat -s DEBUG AndroidRuntime PPSSPPNativeActivity PPSSPP NativeSurfaceView PowerSaveModeReceiver InputDeviceState PpssppActivity CameraHelper PPSSPPSizeManager
 
 static void MergeRenderAreaRectInto(VkRect2D *dest, const VkRect2D &src) {
 	if (dest->offset.x > src.offset.x) {
@@ -270,11 +270,11 @@ void VulkanQueueRunner::PreprocessSteps(std::vector<VKRStep *> &steps) {
 					// Cheaply skip the first step.
 					steps[j]->stepType = VKRStepType::RENDER_SKIP;
 					break;
-				} else if (steps[i]->stepType == VKRStepType::COPY &&
-					steps[i]->copy.src == render_j.framebuffer) {
-					// Can't eliminate the clear if a game copies from it before it's
-					// rendered to. However this should be rare.
-					// TODO: This should never happen when we check numReads now.
+				} else if ((steps[i]->stepType == VKRStepType::COPY && (steps[i]->copy.src == render_j.framebuffer || steps[i]->copy.dst == render_j.framebuffer)) ||
+					(steps[i]->stepType == VKRStepType::BLIT && (steps[i]->blit.src == render_j.framebuffer || steps[i]->blit.dst == render_j.framebuffer)) ||
+					(steps[i]->stepType == VKRStepType::READBACK && steps[i]->readback.src == render_j.framebuffer)) {
+					// Can't move the clear past a copy or blit from or into the framebuffer. Into it is common:
+					// resizing a framebuffer clears the new one and copies the old contents in (Asphalt Urban GT 2).
 					break;
 				}
 			}
@@ -933,7 +933,7 @@ void VulkanQueueRunner::LogRenderPass(const VKRStep &pass, bool verbose) {
 				INFO_LOG(Log::G3D, "  BindGraphicsPipeline(%x)", (int)(intptr_t)cmd.graphics_pipeline.pipeline);
 				break;
 			case VKRRenderCommand::BLEND:
-				INFO_LOG(Log::G3D, "  BlendColor(%08x)", cmd.blendColor.color);
+				INFO_LOG(Log::G3D, "  BlendColor(%f, %f, %f, %f)", cmd.blendColor.color[0], cmd.blendColor.color[1], cmd.blendColor.color[2], cmd.blendColor.color[3]);
 				break;
 			case VKRRenderCommand::CLEAR:
 				INFO_LOG(Log::G3D, "  Clear");
@@ -989,7 +989,11 @@ void VulkanQueueRunner::LogReadbackImage(const VKRStep &step) {
 void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer cmd, const int curFrame, QueueProfileContext &profile) {
 	for (size_t i = 0; i < step.preTransitions.size(); i++) {
 		const TransitionRequest &iter = step.preTransitions[i];
-		if (iter.aspect == VK_IMAGE_ASPECT_COLOR_BIT && iter.fb->color.layout != iter.targetLayout) {
+		if (iter.samples) {
+			if (iter.fb->msaaColor.image != VK_NULL_HANDLE && iter.fb->msaaColor.layout != iter.targetLayout) {
+				recordBarrier_.TransitionColorImageAuto(&iter.fb->msaaColor, iter.targetLayout);
+			}
+		} else if (iter.aspect == VK_IMAGE_ASPECT_COLOR_BIT && iter.fb->color.layout != iter.targetLayout) {
 			recordBarrier_.TransitionColorImageAuto(
 				&iter.fb->color,
 				iter.targetLayout
@@ -1179,12 +1183,8 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 		}
 
 		case VKRRenderCommand::BLEND:
-		{
-			float bc[4];
-			Uint8x4ToFloat4(bc, c.blendColor.color);
-			vkCmdSetBlendConstants(cmd, bc);
+			vkCmdSetBlendConstants(cmd, c.blendColor.color);
 			break;
-		}
 
 		case VKRRenderCommand::PUSH_CONSTANTS:
 			if (pipelineOK) {
@@ -1345,6 +1345,10 @@ VKRRenderPass *VulkanQueueRunner::PerformBindFramebufferAsRenderTarget(const VKR
 		}
 
 		recordBarrier_.TransitionColorImageAuto(&fb->color, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		if (fb->msaaColor.image != VK_NULL_HANDLE) {
+			// Texturing from the samples (BindFramebufferAsTexture) moves this one out of the attachment layout.
+			recordBarrier_.TransitionColorImageAuto(&fb->msaaColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		}
 
 		// If the render pass doesn't touch depth, we can avoid a layout transition of the depth buffer.
 		if (fb->depth.image && RenderPassTypeHasDepth(step.render.renderPassType)) {

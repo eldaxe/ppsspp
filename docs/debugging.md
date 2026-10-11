@@ -95,17 +95,25 @@ A working invocation, and the traps around it:
   and the game ran to completion - not a transport problem.
 - Some events deliberately never respond while the CPU is stepping, so `--sync` will burn its full timeout on them:
   `gpu.stats.get` and `gpu.stats.feed` (documented - they answer after the next flip), `gpu.record.dump`, and
-  `input.buttons.press` (waits for N frames). Resume the CPU first, or skip them in scripted runs.
-- Log broadcasts drown scripted output. Send this first:
-  `{"event":"broadcast.config.set","disallowed":{"logger":true,"input":true}}`. Note `wsdbg`'s `key=value` shorthand
-  can't build nested objects - paste raw JSON lines (any line starting with `{` is sent verbatim) for those.
+  `input.buttons.press` (waits for N frames). Send them with wsdbg's `:nowait`, and let the next line
+  (a `cpu.runUntilTime`) run the CPU:
+  `:nowait input.buttons.press button=circle duration=4`. `duration` counts vblanks, not seconds.
+- **Don't send a bare `cpu.resume` in a `--sync` script.** `--sync` waits for the CPU to stop again, which
+  a free run never does, so it burns the whole `--sync-timeout` while headless runs unthrottled, which can
+  be hundreds of emulated seconds. Use `cpu.runUntilTime`.
+- Log broadcasts drown scripted output. Pass `--quiet` to wsdbg, which turns them off.
+- **Nested parameters work in wsdbg's `key=value` shorthand**: values are parsed as JSON, and single quotes keep
+  the inner double quotes, e.g. `input.buttons.send buttons='{"cross":true}'`. Prefer that over a raw JSON line,
+  which gets no ticket (see below).
 - Keep wsdbg scripts in files and pipe them in, rather than building JSON inline in a shell command - inline
   `{"event":...}` in a bash heredoc trips Claude Code's command analyzer ("brace with quote character") and forces a
   manual approval prompt for every single invocation.
 - **`--sync` can only match a response to a request that carries a ticket**, and wsdbg only assigns tickets to its
-  `key=value` shorthand. A raw JSON line (needed for nested params) gets no ticket, so `--sync` just waits for the
-  next message and treats whatever broadcast arrives first as the answer, silently desynchronising the rest of the
-  script. Use the shorthand wherever the parameters are flat. Hex works there: `memory.disasm address=0x08804000`.
+  `key=value` shorthand. A raw JSON line without a `ticket` isn't waited for at all, so use the shorthand (nested
+  values included, see above). Hex works there: `memory.disasm address=0x08804000`.
+- **To see the screen from a script, use wsdbg's `:screenshot <file.png>`** while the CPU is stopped, e.g. after a
+  `cpu.runUntilTime`. With headless, run `--graphics=software` for it: headless Vulkan has no output image to read
+  back and asserts. Give a native path on Windows (`C:/...`, not `/c/...`).
 - **Headless reports `SYSPROP_HAS_DEBUGGER` as false** (only `Windows/main.cpp` implements it), so anything gated on
   it does nothing there - `LoadSymbolsIfSupported()` in `Core/System.cpp`, for instance, doesn't load `.ppmap`/`.sym`
   at all under headless. Gate new debugger-adjacent features on their own config flag, not on that property.
@@ -207,9 +215,37 @@ For game runs, prefer a hardware backend: 30 emulated seconds of God of War take
 The pspautotests pass on Vulkan and OpenGL except for 17 GPU tests, whose references are hardware screenshots
 that the hardware backends don't match exactly.
 
+To smoke-test a CPU or GPU change on real games, run the old and the new binary on the same games with
+`--timeout-emulated` and `--screenshot-save=`, and compare the screenshots. Most games are deterministic from
+run to run, so a different screenshot means different behaviour. God of War: Chains of Olympus isn't: its menu
+animation follows wall-clock time, so even the same binary lands on different frames.
+
+For audio, `--dump-audio=FILE.wav` records the mixed output (before the game volume setting) for the whole run.
+An audio glitch you can hear usually shows in the waveform: a click is a jump between neighbouring samples, and
+a repeated or dropped mixer block is two identical 64-sample runs in a row.
+
 Pass `--graphics` explicitly even when you want the default, so a copied command line doesn't depend on it. If a
 run goes silent with no CPU use, a host thread is blocked, and neither `--timeout-wall` nor `--timeout-emulated`
 will end it, as both are only checked when the emulation loop comes around.
+
+### Measuring speed
+
+`Tools/headless_bench.py` compares the speed of headless binaries on savestates or frame dumps. It alternates
+the binaries from round to round and reports medians of four numbers per binary:
+
+- **Wall time** is what a player sees, but it swings by several percent between identical runs (heat, the
+  scheduler moving threads between performance and efficiency cores).
+- **CPU time** (all threads) says how much work was done. A change that keeps it but cuts wall time spreads
+  the work better, and one that cuts it while wall time stays has left the threads waiting.
+- **Instructions retired** vary by well under 0.1% between identical runs, so they show changes too small for
+  wall time.
+- **Cycles** also count stalls (a division, a missed cache line) that instructions don't.
+
+The last two come from `/usr/bin/time -l` on macOS and `perf stat` on Linux. The tool checks for mains power
+first: on battery (or in macOS low power mode) the clock speed varies and the numbers aren't comparable. Stop
+anything else that uses the CPU, including a forgotten `usbhostfs_pc`, which can spin a core indefinitely. A run
+that exits with an error, misses `TIMEOUT (emulated)` or doesn't load its savestate stops the tool rather than
+passing as a fast run.
 
 ## Debugging and breakpoint considerations
 

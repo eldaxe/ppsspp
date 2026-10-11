@@ -147,6 +147,7 @@ void GLQueueRunner::RunInitSteps(const FastVec<GLRInitStep> &steps, bool skipGLC
 			case GLRInitStepType::CREATE_SHADER:
 			{
 				WARN_LOG(Log::G3D, "CREATE_SHADER found with skipGLCalls, not good");
+				delete[] step.create_shader.code;
 				break;
 			}
 			default:
@@ -678,6 +679,9 @@ void GLQueueRunner::RunSteps(const std::vector<GLRStep *> &steps, GLFrameData &f
 							}
 						}
 						break;
+					case GLRRenderCommand::UNIFORMSTEREOMATRIX:
+						delete[] c.uniformStereoMatrix4.mData;
+						break;
 					default:
 						break;
 					}
@@ -789,6 +793,10 @@ void GLQueueRunner::PerformBlit(const GLRStep &step) {
 	int dstX2 = step.blit.dstRect.x + step.blit.dstRect.w;
 	int dstY2 = step.blit.dstRect.y + step.blit.dstRect.h;
 
+	// Blits are scissored, and between render passes the scissor test is still on (with the last pass's rectangle).
+	if (scissorTestOn_) {
+		glDisable(GL_SCISSOR_TEST);
+	}
 	if (gl_extensions.GLES3 || gl_extensions.ARB_framebuffer_object) {
 		glBlitFramebuffer(srcX1, srcY1, srcX2, srcY2, dstX1, dstY1, dstX2, dstY2, step.blit.aspectMask, step.blit.filter ? GL_LINEAR : GL_NEAREST);
 		CHECK_GL_ERROR_IF_DEBUG();
@@ -799,6 +807,9 @@ void GLQueueRunner::PerformBlit(const GLRStep &step) {
 #endif // defined(USING_GLES2) && defined(__ANDROID__)
 	} else {
 		ERROR_LOG(Log::G3D, "GLQueueRunner: Tried to blit without the capability");
+	}
+	if (scissorTestOn_) {
+		glEnable(GL_SCISSOR_TEST);
 	}
 }
 
@@ -827,6 +838,7 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 		glDisable(GL_CULL_FACE);
 		glDisable(GL_DITHER);
 		glEnable(GL_SCISSOR_TEST);
+		scissorTestOn_ = true;
 #ifndef USING_GLES2
 		if (!gl_extensions.IsGLES) {
 			glDisable(GL_COLOR_LOGIC_OP);
@@ -886,6 +898,9 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 	};
 
 	GLRect2D scissorRc = { -1, -1, -1, -1 };
+	// GL_DEPTH_STENCIL_TEXTURE_MODE needs GL 4.3 or GLES 3.1. Without it a depth-stencil texture samples depth,
+	// and setting the mode is an error (Apple's GL 4.1).
+	const bool stencilTexturing = gl_extensions.ARB_stencil_texturing || (gl_extensions.IsGLES && gl_extensions.VersionGEThan(3, 1));
 
 	CHECK_GL_ERROR_IF_DEBUG();
 	auto &commands = step.commands;
@@ -1207,15 +1222,19 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 					glBindTexture(GL_TEXTURE_2D, c.bind_fb_texture.framebuffer->z_stencil_texture.texture);
 					curTex[slot] = &c.bind_fb_texture.framebuffer->z_stencil_texture;
 				}
-				// This should be uncommon, so always set the mode.
-				glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT);
+				// This should be uncommon, so always set the mode (where it exists).
+				if (stencilTexturing) {
+					glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_DEPTH_COMPONENT);
+				}
 			} else if (c.bind_fb_texture.aspect == GL_STENCIL_BUFFER_BIT) {
 				if (curTex[slot] != &c.bind_fb_texture.framebuffer->z_stencil_texture) {
 					glBindTexture(GL_TEXTURE_2D, c.bind_fb_texture.framebuffer->z_stencil_texture.texture);
 					curTex[slot] = &c.bind_fb_texture.framebuffer->z_stencil_texture;
 				}
-				// This should be uncommon, so always set the mode.
-				glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_STENCIL_INDEX);
+				// This should be uncommon, so always set the mode (where it exists).
+				if (stencilTexturing) {
+					glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_STENCIL_TEXTURE_MODE, GL_STENCIL_INDEX);
+				}
 			} else {
 				curTex[slot] = nullptr;
 			}
@@ -1446,8 +1465,10 @@ void GLQueueRunner::PerformRenderPass(const GLRStep &step, bool first, bool last
 	if (last && gl_extensions.ARB_vertex_array_object) {
 		glBindVertexArray(0);
 	}
-	if (last)
+	if (last) {
 		glDisable(GL_SCISSOR_TEST);
+		scissorTestOn_ = false;
+	}
 	if (depthEnabled)
 		glDisable(GL_DEPTH_TEST);
 	if (stencilEnabled)

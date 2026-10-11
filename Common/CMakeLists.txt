@@ -260,6 +260,7 @@ add_library(Common STATIC
 	Render/Text/draw_text_uwp.cpp
 	Render/Text/draw_text_uwp.h
 	Audio/AudioBackend.h
+	Audio/SampleRing.h
 	System/Display.cpp
 	System/Display.h
 	System/Application.h
@@ -386,7 +387,7 @@ if(TARGET Ext::GLEW)
 endif()
 
 if(WIN32)
-	target_link_libraries(Common winmm dsound dxguid d2d1 dwrite d3d11 Version)
+	target_link_libraries(Common winmm dsound dxguid d2d1 dwrite d3d11 Version dbghelp)
 endif()
 
 target_link_libraries(Common ${LIBZIP_LIBRARY} 7zip ${PNG_LIBRARIES} basis_universal ${ZLIB_LIBRARY} pugixml vma gason udis86 ${RT_LIB} ${ATOMIC_LIB})

@@ -76,6 +76,8 @@ enum class ReplacerDecimateMode {
 
 class TextureReplacer {
 public:
+	TextureReplacer(const TextureReplacer &) = delete;
+	TextureReplacer &operator=(const TextureReplacer &) = delete;
 	// The draw context is checked for supported texture formats.
 	TextureReplacer(Draw::DrawContext *draw);
 	~TextureReplacer();
@@ -116,6 +118,7 @@ protected:
 	bool FindFiltering(ReplacementCacheKey key, TextureFiltering *forceFiltering);
 
 	bool LoadIni(std::string *error, bool notify = true);
+	void DeleteVFS();
 	bool LoadIniValues(IniFile &ini, VFSBackend *dir, bool isOverride, std::string *error);
 	void ParseHashRange(const std::string &key, const std::string &value);
 	void ParseFiltering(const std::string &key, const std::string &value);

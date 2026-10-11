@@ -21,6 +21,9 @@ inline bool needFragmentDepthClamp() {
 	return (gstate.getDepthRangeMin() == 0 || gstate.getDepthRangeMax() == 0xFFFF) && gstate.isDepthClipEnabled();
 }
 
+// These IDs are stored in the OpenGL and Vulkan shader caches on disk. Changing the bit layout or meaning
+// requires bumping CACHE_VERSION in both ShaderManagerGLES.cpp and ShaderManagerVulkan.cpp.
+
 // VS_BIT_LIGHT_UBERSHADER indicates that some groups of these will be
 // sent to the shader and processed there. This cuts down the number of shaders ("ubershader approach").
 enum VShaderBit : uint8_t {
@@ -107,7 +110,8 @@ enum FShaderBit : uint8_t {
 	FS_BIT_USE_FRAMEBUFFER_FETCH = 59,
 	FS_BIT_DEPTH_TEST_NEVER = 60,  // Only used on Mali. Set when depth == NEVER. We forcibly avoid writing to depth in this case, since it crashes the driver.
 	FS_BIT_SAMPLE_ARRAY_TEXTURE = 61,  // For multiview, framebuffers are array textures and we need to sample the two layers correctly.
-	// Free bits: 62-63
+	FS_BIT_NO_DEPTH_WRITE = 62,  // Depth test effectively off, so skip the fragment depth write.
+	// Free bit: 63
 };
 
 static inline FShaderBit operator +(FShaderBit bit, int i) {

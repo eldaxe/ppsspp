@@ -4,6 +4,7 @@
 #include "Common/Data/Text/I18n.h"
 #include "Common/CPUDetect.h"
 #include "Common/StringUtils.h"
+#include "Common/Log/LogManager.h"
 #include "Common/Data/Text/StringWriter.h"
 
 #include "Core/MIPS/MIPS.h"
@@ -33,6 +34,8 @@
 
 // For std::max
 #include <algorithm>
+
+static void DrawLogViewOverlay(UIContext *ctx, const Bounds &bounds);
 
 static void DrawDebugStats(UIContext *ctx, const Bounds &bounds) {
 	FontID ubuntu24("UBUNTU24");
@@ -271,9 +274,35 @@ void DrawDebugOverlay(UIContext *ctx, const Bounds &bounds, DebugOverlay overlay
 		if (inGame)
 			DrawFramebufferList(ctx, gpu, layoutBounds);
 		break;
+	case DebugOverlay::LOG_VIEW:
+		if (inGame)
+			DrawLogViewOverlay(ctx, layoutBounds);
+		break;
 	default:
 		break;
 	}
+}
+
+static void DrawLogViewOverlay(UIContext *ctx, const Bounds &bounds) {
+	const RingbufferLog &ring = g_logManager.GetRingbuffer();
+	FontID ubuntu24("UBUNTU24");
+	const float lineHeight = 18.0f;
+	const float overlayHeight = bounds.h * 0.5f;
+	const int maxLines = std::max(0, (int)((overlayHeight - 12.0f) / lineHeight));
+	const int firstLine = std::max(0, ring.GetCount() - maxLines);
+
+	ctx->Flush();
+	ctx->BindFontTexture();
+	ctx->Draw()->SetFontScale(0.5f, 0.5f);
+	for (int i = ring.GetCount() - 1, line = 0; i >= firstLine; --i, ++line) {
+		std::string_view text = StripSpaces(ring.TextAt(i));
+		const uint32_t color = 0xFF000000 | LogManager::GetLevelColor(ring.LevelAt(i));
+		const float y = bounds.y + 8.0f + line * lineHeight;
+		ctx->Draw()->DrawTextRect(ubuntu24, text, bounds.x + 10.0f, y, bounds.w - 20.0f, lineHeight, color, FLAG_DYNAMIC_ASCII);
+	}
+	ctx->Draw()->SetFontScale(1.0f, 1.0f);
+	ctx->Flush();
+	ctx->RebindTexture();
 }
 
 static const char *CPUCoreAsString(int core) {

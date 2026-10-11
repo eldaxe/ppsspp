@@ -761,8 +761,9 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 		g_logManager.EnableOutput(LogOutput::File);
 		g_logManager.SetFileLogPath(Path(cmdLineOptions.log.value()));
 	} else {
-		// Set a default file logging path, in case the user enables it with the checkbox later.
-		g_logManager.SetFileLogPath(GetSysDirectory(DIRECTORY_DUMP) / "log.txt");
+		// Keep the Developer Tools "Log to file" output in PSP/SYSTEM.
+		// GetSysDirectory resolves the actual memstick location, including scoped-storage paths.
+		g_logManager.SetFileLogPath(GetSysDirectory(DIRECTORY_SYSTEM) / "debug.log");
 	}
 
 	PostLoadConfig();
@@ -947,7 +948,6 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 #if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
 	if (IsWin7OrHigher()) {
 		winCamera = new WindowsCaptureDevice(CAPTUREDEVICE_TYPE::VIDEO);
-		winMic = new WindowsCaptureDevice(CAPTUREDEVICE_TYPE::AUDIO);
 	}
 #endif
 
@@ -1077,11 +1077,6 @@ void NativeShutdownGraphics(GraphicsContext *graphicsContext) {
 		winCamera->waitShutDown();
 		delete winCamera;
 		winCamera = nullptr;
-	}
-	if (winMic) {
-		winMic->waitShutDown();
-		delete winMic;
-		winMic = nullptr;
 	}
 #endif
 
@@ -1345,7 +1340,9 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		g_screenManager->resized();
 
 		// TODO: Move this to the GraphicsContext objects for each backend.
-#if !PPSSPP_PLATFORM(WINDOWS) && !defined(ANDROID)
+		// (Android used to be left out here, since every size change there was a full graphics restart,
+		// and DeviceRestore covers it. Rotation and window resizing are in-place now.)
+#if !PPSSPP_PLATFORM(WINDOWS)
 		PSP_CoreParameter().pixelWidth = g_display.pixel_xres;
 		PSP_CoreParameter().pixelHeight = g_display.pixel_yres;
 		System_PostUIMessage(UIMessage::GPU_DISPLAY_RESIZED);
@@ -1853,7 +1850,7 @@ void NativeShutdown() {
 
 	g_controlMapper.RemoveListener(&g_globalListener);
 
-	Achievements::Shutdown();
+	Achievements::Shutdown(false);  // CancelAll below drops the pending requests.
 
 	if (g_Config.bAchievementsEnable) {
 		FILE *iconCacheFile = File::OpenCFile(GetSysDirectory(DIRECTORY_CACHE) / "icon.cache", "wb");
