@@ -301,7 +301,6 @@ public:
 	bool bLowLatencyPresent;
 
 	bool bSoftwareRendering;
-	bool bSoftwareRenderingJit;
 	bool bSoftwareDisableDithering;
 	bool bHardwareTransform;
 	bool bVendorBugChecksEnabled;
@@ -489,6 +488,7 @@ public:
 
 	// Controls Visibility
 	bool bShowTouchControls = false;
+	bool bTouchAnalogCircleRange = false;  // Restrict touch analog input to a circular range.
 
 	// Disable diagonals
 	bool bDisableDpadDiagonals;

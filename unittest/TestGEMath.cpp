@@ -281,7 +281,7 @@ static bool TestGEUVSpan() {
 		fast++;
 		for (int l = 0; l < 4; ++l) {
 			const float wq = TruncateToFloat24((float)ldexp((double)qs[l], expQ));
-			float ws = 0.0f, wt = 0.0f;
+			float ws = GE_NONPOSITIVE_Q_UV, wt = GE_NONPOSITIVE_Q_UV;
 			if (wq > 0.0f) {
 				const double r = GERecip(wq);
 				ws = GEUVProduct((double)TruncateToFloat24((float)ldexp((double)ss[l], expS)) * r);
@@ -312,7 +312,7 @@ static bool TestGEUVSpan() {
 		GEUVSpanCore<false>(Vec4S32::Load(qv), Vec4S32::Load(sv), Vec4S32::Load(tv), expQ, expS, expT, s, t, q);
 		for (int l = 0; l < 4; ++l) {
 			const float wq = TruncateToFloat24((float)ldexp((double)qv[l], expQ));
-			float ws = 0.0f, wt = 0.0f;
+			float ws = GE_NONPOSITIVE_Q_UV, wt = GE_NONPOSITIVE_Q_UV;
 			if (wq > 0.0f) {
 				const double r = GERecip(wq);
 				ws = GEUVProduct((double)TruncateToFloat24((float)ldexp((double)sv[l], expS)) * r);
@@ -384,6 +384,27 @@ static bool TestGERowSum4() {
 		default: av = GERowSum4<4>(av, bv); break;
 		}
 		av.Store(got);
+		// The same with the right operands taken apart first.
+		{
+			Vec4F32 full[4] = { bv[0], bv[1], bv[2], bv[3] };
+			for (int k = count; k < 4; ++k)
+				full[k] = Vec4F32::Zero();
+			GERowSumRows rows;
+			rows.Set(full);
+			Vec4F32 pv = Vec4F32::Load(a);
+			switch (count) {
+			case 1: pv = GERowSum4<1>(pv, rows); break;
+			case 2: pv = GERowSum4<2>(pv, rows); break;
+			case 3: pv = GERowSum4<3>(pv, rows); break;
+			default: pv = GERowSum4<4>(pv, rows); break;
+			}
+			alignas(16) float pre[4];
+			pv.Store(pre);
+			if (memcmp(pre, got, sizeof(pre)) != 0) {
+				printf("GERowSum4 with GERowSumRows differs: case %d\n", i);
+				return false;
+			}
+		}
 		for (int l = 0; l < 4; ++l) {
 			GERowTerm terms[4];
 			for (int k = 0; k < count; ++k)
@@ -394,6 +415,70 @@ static bool TestGERowSum4() {
 				for (int k = 0; k < count; ++k)
 					printf("  %a * %a\n", a[k], b[k][l]);
 				return false;
+			}
+		}
+	}
+
+	// GERowSumLanes, a lane per vertex, against GERowSum.
+	for (int i = 0; i < 100000; ++i) {
+		const int count = 1 + (i & 3);
+		const int spread = (i % 7 == 0) ? 120 : ((i % 3 == 0) ? 20 : 3);
+		const int center = (i % 11 == 0) ? (int)(next() % 254) + 1 : 127;
+		alignas(16) float a[4][4] = {};
+		float b[4] = {};
+		Vec4F32 av[4];
+		GERowSumLeft left[4];
+		for (int k = 0; k < 4; ++k) {
+			for (int l = 0; l < 4; ++l)
+				a[k][l] = k < count ? randomFloat24(center, spread) : 0.0f;
+			b[k] = k < count ? randomFloat24(center, spread) : 0.0f;
+			av[k] = Vec4F32::Load(a[k]);
+			left[k] = GERowSumLeft::From(av[k]);
+		}
+		GERowSumEntries entries;
+		entries.Set(b);
+		Vec4F32 rv;
+		switch (count) {
+		case 1: rv = GERowSumLanes<1>(left, av, entries); break;
+		case 2: rv = GERowSumLanes<2>(left, av, entries); break;
+		case 3: rv = GERowSumLanes<3>(left, av, entries); break;
+		default: rv = GERowSumLanes<4>(left, av, entries); break;
+		}
+		alignas(16) float got[4];
+		rv.Store(got);
+		for (int l = 0; l < 4; ++l) {
+			GERowTerm terms[4];
+			for (int k = 0; k < count; ++k)
+				terms[k] = GEProduct(a[k][l], b[k]);
+			const float want = GERowSum(terms, count);
+			if (memcmp(&got[l], &want, sizeof(float)) != 0) {
+				printf("GERowSumLanes: case %d lane %d: %a, want %a (count %d)\n", i, l, got[l], want, count);
+				return false;
+			}
+		}
+	}
+
+	// GERecip4 against GERecip, every mantissa, both signs, exponents across the range it covers.
+	for (int e = 1; e < 127 + 126; e += 7) {
+		for (uint32_t m = 0; m < 0x8000; m += 4) {
+			alignas(16) float w[4];
+			for (int l = 0; l < 4; ++l) {
+				const uint32_t bits = ((l & 1) ? 0x80000000 : 0) | ((uint32_t)e << 23) | ((m + l) << 8);
+				memcpy(&w[l], &bits, 4);
+			}
+			Vec4S32 bad = Vec4S32::Zero();
+			alignas(16) float got[4];
+			GERecip4(Vec4F32::Load(w), bad).Store(got);
+			if (AnyCompareBitsSet(bad)) {
+				printf("GERecip4: exponent %d flagged\n", e);
+				return false;
+			}
+			for (int l = 0; l < 4; ++l) {
+				const float want = GERecip(w[l]);
+				if (memcmp(&got[l], &want, sizeof(float)) != 0) {
+					printf("GERecip4: %a: %a, want %a\n", w[l], got[l], want);
+					return false;
+				}
 			}
 		}
 	}
@@ -429,7 +514,17 @@ static bool TestGERowSum4() {
 			}
 			sink = acc;
 		}, 0.5, 1);
-		printf("GERowSum4: %.1f M transforms/s, scalar GERowSum: %.1f M/s\n", simd * count / 1e6, scalar * count / 1e6);
+		GERowSumRows pre;
+		pre.Set(rows);
+		const double simdPre = CallsPerSecond([&] {
+			Vec4F32 acc = Vec4F32::Zero();
+			for (int i = 0; i < count; ++i)
+				acc = acc + GERowSum4<4>(Vec4F32::Load(&pos[i * 4]), pre);
+			alignas(16) float out[4];
+			acc.Store(out);
+			sink = out[0];
+		}, 0.5, 1);
+		printf("GERowSum4: %.1f M transforms/s (%.1f M/s with GERowSumRows), scalar GERowSum: %.1f M/s\n", simd * count / 1e6, simdPre * count / 1e6, scalar * count / 1e6);
 
 		const double dot4 = CallsPerSecond([&] {
 			float acc = 0.0f;
@@ -554,6 +649,28 @@ static bool TestGELineCoverageAlpha() {
 	return true;
 }
 
+static bool TestGESpriteUPlaneExact() {
+	// Sprite left, top, right, bottom in pixels, u at the left and right, texture width, and whether the u plane's
+	// gradient is exact. The 1:1 sizes are exp87's (64x64 samples texel centers on a PSP, the others blend);
+	// the u = 1 + 2x ones are SOCOM's and Syphon Filter's CLUT8 reads of a 5551 framebuffer.
+	static const struct { int x0, y0, x1, y1, u0, u1, texW; bool exact; } cases[] = {
+		{ 0, 0, 64, 64, 37, 101, 512, true },
+		{ 0, 0, 16, 272, 37, 53, 512, false },
+		{ 0, 0, 480, 16, 37, 517, 512, false },
+		{ 0, 0, 64, 272, 1, 129, 1024, false },
+		{ 192, 0, 240, 272, 385, 481, 1024, false },
+		{ 0, 0, 64, 128, 1, 129, 256, true },
+	};
+	for (const auto &c : cases) {
+		const bool exact = GESpriteUPlaneExact(c.x0 * 16, c.y0 * 16, c.x1 * 16, c.y1 * 16, (double)c.u0 / c.texW, (double)c.u1 / c.texW);
+		if (exact != c.exact) {
+			printf("GESpriteUPlaneExact(%dx%d, u %d-%d / %d) = %d, want %d\n", c.x1 - c.x0, c.y1 - c.y0, c.u0, c.u1, c.texW, (int)exact, (int)c.exact);
+			return false;
+		}
+	}
+	return true;
+}
+
 bool TestGEMath() {
 	bool ok = true;
 	ok = TestFloat24() && ok;
@@ -572,5 +689,6 @@ bool TestGEMath() {
 	ok = TestGELightPow() && ok;
 	ok = TestGELightColor() && ok;
 	ok = TestGELineCoverageAlpha() && ok;
+	ok = TestGESpriteUPlaneExact() && ok;
 	return ok;
 }

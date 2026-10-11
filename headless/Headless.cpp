@@ -58,6 +58,7 @@
 #include "Core/CoreTiming.h"
 #include "Core/EmuThread.h"
 #include "Core/HLE/HLE.h"
+#include "Core/HLE/__sceAudio.h"
 #include "Core/MIPS/MIPSTables.h"
 #include "Core/System.h"
 #include "Core/Util/PSARUnpack.h"
@@ -91,6 +92,8 @@ static std::string g_debugOutputBuffer;
 // Set when a run was asked for a configuration that couldn't be honoured. That isn't a test result,
 // so it fails the process whether or not this run was comparing anything.
 static bool g_configRefused = false;
+// Set when a test or game failed to boot. Like g_configRefused, this fails the process even when not comparing.
+static bool g_bootFailed = false;
 static bool g_writeFailureScreenshot = true;
 static bool g_writeDebugOutput = true;
 // Whether the emulated program's stdout/stderr are forwarded to ours. On by default - just running
@@ -118,7 +121,6 @@ jobject Android_GetActivity(JNIEnv *env) {
 }
 
 bool System_AudioRecordingIsAvailable() { return false; }
-bool System_AudioRecordingState() { return false; }
 #endif
 
 // Temporary hacks around annoying linking errors.
@@ -445,7 +447,10 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 	}
 
 	if (!PSP_IsInited()) {
+		// Without this, a failed boot outside --compare printed nothing and exited 0.
+		fprintf(stderr, "Failed to boot '%s': %s\n", coreParameter.fileToStart.c_str(), error_string.c_str());
 		GitHubActionsPrint("error", "Test init failed for %s", currentTestName.c_str());
+		g_bootFailed = true;
 		return false;
 	}
 
@@ -729,7 +734,7 @@ int RunTests(GraphicsContext *graphicsContext, CoreParameter &coreParameter, con
 		}
 	}
 
-	if (g_configRefused) {
+	if (g_configRefused || g_bootFailed) {
 		return 1;
 	}
 
@@ -966,7 +971,6 @@ int main(int argc, const char* argv[]) {
 	// Defaulting this to false silently ran everything on OpenGL, which hangs games early in boot
 	// under Mesa llvmpipe on Linux/WSL.
 	g_Config.bSoftwareRendering = cmdLineOptions.softwareRendering.value_or(true);
-	g_Config.bSoftwareRenderingJit = true;
 	g_Config.iSplineBezierQuality = 2;
 	g_Config.bHighQualityDepth = true;
 	g_Config.bMemStickInserted = true;
@@ -1101,7 +1105,12 @@ int main(int argc, const char* argv[]) {
 		g_Config.memStickDirectory = Path(std::string(getenv("HOME"))) / ".ppsspp";
 #endif
 	}
-	g_Config.nandRootDirectory = GetSysDirectory(DIRECTORY_NAND);
+	// The memstick's NAND, unless --nand says otherwise.
+	if (cmdLineOptions.nand.has_value()) {
+		g_Config.nandRootDirectory = Path(cmdLineOptions.nand.value());
+	} else {
+		g_Config.nandRootDirectory = GetSysDirectory(DIRECTORY_NAND);
+	}
 	coreParameter.nandRoot = g_Config.nandRootDirectory;
 
 	// Most discs carry the firmware they shipped with - this option installs it, if one
@@ -1183,6 +1192,16 @@ int main(int argc, const char* argv[]) {
 	}
 	if (cmdLineOptions.screenshotFilenameSave.has_value()) {
 		SetScreenshotSavePath(Path(std::string(cmdLineOptions.screenshotFilenameSave.value())));
+	}
+	if (cmdLineOptions.dumpAudioFilename.has_value()) {
+#ifndef MOBILE_DEVICE
+		// The mixer only feeds the dump while sound is enabled.
+		g_Config.bEnableSound = true;
+		g_Config.bDumpAudio = true;
+		__StartLogAudio(Path(std::string(cmdLineOptions.dumpAudioFilename.value())));
+#else
+		fprintf(stderr, "--dump-audio is not supported on this platform.\n");
+#endif
 	}
 	if (cmdLineOptions.replayEnd.has_value()) {
 		GPURecord::SetReplayDrawLimit(cmdLineOptions.replayEnd.value());

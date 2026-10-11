@@ -761,8 +761,9 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 		g_logManager.EnableOutput(LogOutput::File);
 		g_logManager.SetFileLogPath(Path(cmdLineOptions.log.value()));
 	} else {
-		// Set a default file logging path, in case the user enables it with the checkbox later.
-		g_logManager.SetFileLogPath(GetSysDirectory(DIRECTORY_DUMP) / "log.txt");
+		// Keep the Developer Tools "Log to file" output in PSP/SYSTEM.
+		// GetSysDirectory resolves the actual memstick location, including scoped-storage paths.
+		g_logManager.SetFileLogPath(GetSysDirectory(DIRECTORY_SYSTEM) / "debug.log");
 	}
 
 	PostLoadConfig();
@@ -947,7 +948,6 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 #if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
 	if (IsWin7OrHigher()) {
 		winCamera = new WindowsCaptureDevice(CAPTUREDEVICE_TYPE::VIDEO);
-		winMic = new WindowsCaptureDevice(CAPTUREDEVICE_TYPE::AUDIO);
 	}
 #endif
 
@@ -1077,11 +1077,6 @@ void NativeShutdownGraphics(GraphicsContext *graphicsContext) {
 		winCamera->waitShutDown();
 		delete winCamera;
 		winCamera = nullptr;
-	}
-	if (winMic) {
-		winMic->waitShutDown();
-		delete winMic;
-		winMic = nullptr;
 	}
 #endif
 

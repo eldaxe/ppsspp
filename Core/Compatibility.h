@@ -97,7 +97,6 @@ struct CompatFlags {
 	bool BlockTransferDepth;
 	bool DaxterRotatedAnalogStick;
 	bool ForceMaxDepthResolution;
-	bool SOCOMClut8Replacement;
 	bool LoadCLUTFromCurrentFrameOnly;
 	bool ForceUMDReadSpeed;
 	bool KernelGetSystemTimeLowEatMoreCycles;
@@ -122,6 +121,7 @@ struct CompatFlags {
 	bool TextureCLUTInShader;
 	bool DisableRangeCulling;
 	bool BlockTransferReadbackSmall;
+	bool DepthCLUTIntoHalves;
 };
 
 struct VRCompat {
