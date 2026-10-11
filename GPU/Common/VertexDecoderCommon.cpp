@@ -170,8 +170,9 @@ void GetIndexBounds(const void *inds, int count, u32 vertType, u16 *indexLowerBo
 		bool oob = false;
 		const u32_le *ind32 = (const u32_le *)inds;
 		for (int i = 0; i < count; i++) {
+			// The PSP ignores the upper 16 bits, so only the low ones count.
 			const u16 value = (u16)ind32[i];
-			// These aren't documented and should be rare.  Let's bounds check each one.
+			// Games setting the upper bits should be rare, so report them.
 			if (ind32[i] != value) {
 				oob = true;
 			}
@@ -1210,7 +1211,8 @@ void VertexDecoder::SetVertexType(u32 fmt, const VertexDecoderOptions &options, 
 		DEBUG_LOG(Log::G3D, "VTYPE: THRU=%i TC=%i COL=%i POS=%i NRM=%i WT=%i NW=%i IDX=%i MC=%i", (int)throughmode, tc, col, pos, nrm, weighttype, nweights, idx, morphcount);
 	}
 
-	skinInDecode = weighttype != 0;
+	const bool callerSkins = weighttype != 0 && !throughmode && options.callerSkins;
+	skinInDecode = weighttype != 0 && !callerSkins;
 	if (weighttype) { // && nweights?
 		weightoff = size;
 		//size = align(size, wtalign[weighttype]);	unnecessary
@@ -1220,7 +1222,8 @@ void VertexDecoder::SetVertexType(u32 fmt, const VertexDecoderOptions &options, 
 
 		// No visible output, computes a matrix that is passed through the skinMatrix variable
 		// to the "nrm" and "pos" steps.
-		steps_[numSteps_++] = wtstep_skin[weighttype];
+		if (skinInDecode)
+			steps_[numSteps_++] = wtstep_skin[weighttype];
 	}
 
 	if (tc) {
@@ -1279,7 +1282,9 @@ void VertexDecoder::SetVertexType(u32 fmt, const VertexDecoderOptions &options, 
 		if (nrmalign[nrm] > biggest)
 			biggest = nrmalign[nrm];
 
-		if (skinInDecode) {
+		if (callerSkins) {
+			decFmt.nrmfmt = DEC_FLOAT_3;
+		} else if (skinInDecode) {
 			steps_[numSteps_++] = morphcount == 1 ? nrmstep_skin[nrm] : nrmstep_morphskin[nrm];
 			// After skinning, we always have three floats.
 			decFmt.nrmfmt = DEC_FLOAT_3;
@@ -1328,7 +1333,7 @@ void VertexDecoder::SetVertexType(u32 fmt, const VertexDecoderOptions &options, 
 		// We don't set posfmt because it's always DEC_FLOAT_3.
 		if (throughmode) {
 			steps_[numSteps_++] = posstep_through[pos];
-		} else {
+		} else if (!callerSkins) {
 			if (skinInDecode) {
 				steps_[numSteps_++] = morphcount == 1 ? posstep_skin[pos] : posstep_morph_skin[pos];
 			} else {
@@ -1373,6 +1378,12 @@ void VertexDecoder::SetVertexType(u32 fmt, const VertexDecoderOptions &options, 
 	// Attempt to JIT as well. But only do that if the main CPU JIT is enabled, in order to aid
 	// debugging attempts - if the main JIT doesn't work, this one won't do any better, probably.
 	if (jitCache) {
+		// Compile doesn't check for space. We can't clear the cache here since other decoders point into it,
+		// so when it's full (only seen with garbage display lists), new decoders use the interpreter.
+		if (jitCache->GetSpaceLeft() < 4096) {
+			WARN_LOG(Log::G3D, "Vertex decoder JIT cache full, using the interpreter for %08x", fmt_);
+			return;
+		}
 		jitted_ = jitCache->Compile(*this, &jittedSize_);
 		if (!jitted_) {
 			WARN_LOG(Log::G3D, "Vertex decoder JIT failed! fmt = %08x (%s)", fmt_, GetString(SHADER_STRING_SHORT_DESC).c_str());

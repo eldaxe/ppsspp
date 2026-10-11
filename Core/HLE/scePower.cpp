@@ -334,11 +334,9 @@ static int sceKernelVolatileMemTryLock(int type, u32 paddr, u32 psize) {
 
 	switch (error) {
 	case 0:
-		// HACK: This fixes Crash Tag Team Racing.
-		// Should only wait 1200 cycles though according to Unknown's testing,
-		// and with that it's still broken. So it's not this, unfortunately.
-		// Leaving it in for the 0.9.8 release anyway.
-		hleEatCycles(500000);
+		// Under 100us on hardware (tests/threads/scheduling/syscallkinds). This used to eat 500000
+		// cycles as a hack for Crash Tag Team Racing, which no longer needs it.
+		hleEatCycles(1200);
 		DEBUG_LOG(Log::HLE, "sceKernelVolatileMemTryLock(%i, %08x, %08x) - success", type, paddr, psize);
 		break;
 
@@ -433,16 +431,22 @@ static int sceKernelVolatileMemLock(int type, u32 paddr, u32 psize) {
 	case SCE_KERNEL_ERROR_CAN_NOT_WAIT:
 		{
 			WARN_LOG(Log::HLE, "sceKernelVolatileMemLock(%i, %08x, %08x): dispatch disabled", type, paddr, psize);
-			Memory::WriteOrException_U32(0x08400000, paddr);
-			Memory::WriteOrException_U32(0x00400000, psize);
+			// Only through pointers that are there: intr/waits passes NULL and gets just the error.
+			if (Memory::IsValid4AlignedAddress(paddr))
+				Memory::WriteUnchecked_U32(0x08400000, paddr);
+			if (Memory::IsValid4AlignedAddress(psize))
+				Memory::WriteUnchecked_U32(0x00400000, psize);
 		}
 		break;
 
 	case SCE_KERNEL_ERROR_ILLEGAL_CONTEXT:
 		{
 			WARN_LOG(Log::HLE, "sceKernelVolatileMemLock(%i, %08x, %08x): in interrupt", type, paddr, psize);
-			Memory::WriteOrException_U32(0x08400000, paddr);
-			Memory::WriteOrException_U32(0x00400000, psize);
+			// Only through pointers that are there: intr/waits passes NULL and gets just the error.
+			if (Memory::IsValid4AlignedAddress(paddr))
+				Memory::WriteUnchecked_U32(0x08400000, paddr);
+			if (Memory::IsValid4AlignedAddress(psize))
+				Memory::WriteUnchecked_U32(0x00400000, psize);
 		}
 		break;
 
@@ -505,6 +509,10 @@ static u32 scePowerSetCpuClockFrequency(u32 cpufreq) {
 	if (cpufreq == 0 || cpufreq > 333) {
 		return hleLogWarning(Log::sceMisc, SCE_KERNEL_ERROR_INVALID_VALUE, "invalid frequency");
 	}
+	// The CPU can't run faster than the PLL it's divided from.
+	if ((u64)cpufreq * 1000000 > (u64)pllFreq) {
+		return hleLogWarning(Log::sceMisc, SCE_KERNEL_ERROR_INVALID_VALUE, "above the pll frequency");
+	}
 	if (GetLockedCPUSpeedMhz() > 0) {
 		return hleLogDebug(Log::sceMisc, 0, "locked by user config at %i", GetLockedCPUSpeedMhz());
 	}
@@ -551,7 +559,13 @@ static u32 scePowerGetBusClockFrequencyInt() {
 }
 
 static float scePowerGetCpuClockFrequencyFloat() {
-	float cpuFreq = CoreTiming::GetClockFrequencyHz() / 1000000.0f;
+	// The CPU runs at a multiple of pll/511, and the firmware works the value out in single
+	// precision, as pll * n / 511, rather than from whole Hz - which is off in the last digit
+	// (power/freq).
+	const double step = (double)pllFreq / 511.0;
+	const float steps = (float)std::round(CoreTiming::GetClockFrequencyHz() / step);
+	const float pllMhz = (float)(pllFreq / 1000000.0);
+	float cpuFreq = (pllMhz * steps) / 511.0f;
 	DEBUG_LOG(Log::sceMisc, "%f=scePowerGetCpuClockFrequencyFloat()", (float)cpuFreq);
 	return cpuFreq;
 }
@@ -679,6 +693,23 @@ const HLEFunction scePower_driver[] = {
 
 void Register_scePower_driver() {
 	RegisterHLEModule("scePower_driver", ARRAY_SIZE(scePower_driver), scePower_driver);
+}
+
+// Powers the Media Engine's AVC decoder up or down (me_wrapper.prx). Nothing to power here, but the
+// VSH's sceVshBridge_Driver calls it when launching a game, and 2.00's gives up on the launch unless it
+// succeeds.
+static int sceMePowerControlAvcPower(int on) {
+	return hleLogDebug(Log::sceMisc, 0);
+}
+
+const HLEFunction sceMePower_driver[] = {
+	// The old NID (jpcsp's psplibdoc), and 6.60's (uOFW).
+	{0X05B2C420, &WrapI_I<sceMePowerControlAvcPower>,         "sceMePowerControlAvcPower",         'i', "i",  HLE_KERNEL_SYSCALL },
+	{0XB37562AA, &WrapI_I<sceMePowerControlAvcPower>,         "sceMePowerControlAvcPower",         'i', "i",  HLE_KERNEL_SYSCALL },
+};
+
+void Register_sceMePower_driver() {
+	RegisterHLEModule("sceMePower_driver", ARRAY_SIZE(sceMePower_driver), sceMePower_driver);
 }
 
 void Register_sceSuspendForUser() {

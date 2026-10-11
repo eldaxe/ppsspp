@@ -29,6 +29,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/Swap.h"
 #include "Core/Opcode.h"
+#include "GPU/Common/DepthSwizzle.h"
 
 // PPSSPP is very aggressive about trying to do memory accesses directly, for speed.
 // This can be a problem when debugging though, as stray memory reads and writes will
@@ -83,6 +84,9 @@ extern u8 *base;
 // This replaces RAM_NORMAL_SIZE at runtime.
 extern u32 g_MemorySize;
 extern u32 g_PSPModel;
+// Size of RAM (from 0x08000000) that the user partition may extend into. 0 means all of g_MemorySize.
+// Smaller only for homebrew on a PSP-2000+ that doesn't ask for the extra RAM (see CPU_Init).
+extern u32 g_UserPartitionSize;
 
 // UWP has such limited memory management that we need to mask
 // even in 64-bit mode. Also, when using the sanitizer, we need to mask as well.
@@ -189,7 +193,25 @@ inline float ReadUnchecked_Float(const u32 address) {
 #endif
 }
 
-inline u16 ReadUnchecked_U16(const u32 address) {
+// With the software renderer, which stores depth as the GE does, VRAM's 0x04200000 and 0x04600000 mirrors show it
+// through the GE's 16-bit and 32-bit color layouts (GPU/Common/DepthSwizzle.h, ppsspp-re geprobe exp88). Only 16-bit
+// accesses go through them: games read and write depth with nothing else. The layouts are fixed but for the EDRAM
+// address translation, which the software renderer keeps here as DepthTranslationIndex().
+extern int g_depthTranslationIndex;
+
+// Whether the depth mirrors apply the layouts: only with the software renderer. Hardware renderers keep depth
+// plain and handle the games that need the layout their own way.
+bool DepthMirrorsActive();
+u32 DepthMirroredSlow(u32 address);
+
+inline u32 DepthMirrored16(u32 address) {
+	if ((address & 0xBFA00000) == 0x04200000)
+		return DepthMirroredSlow(address);
+	return address;
+}
+
+inline u16 ReadUnchecked_U16(u32 address) {
+	address = DepthMirrored16(address);
 #ifdef MASKED_PSP_MEMORY
 	return *(u16_le *)(base + (address & MEMVIEW32_MASK));
 #else
@@ -230,6 +252,7 @@ inline void WriteUnchecked_Float(float data, u32 address) {
 }
 
 inline void WriteUnchecked_U16(u16 data, u32 address) {
+	address = DepthMirrored16(address);
 #ifdef MASKED_PSP_MEMORY
 	*(u16_le *)(base + (address & MEMVIEW32_MASK)) = data;
 #else
@@ -673,6 +696,8 @@ constexpr u32 PSP_GetScratchpadMemoryEnd() { return 0x00014000;}
 
 constexpr u32 PSP_GetKernelMemoryBase() { return 0x08000000;}
 inline u32 PSP_GetUserMemoryEnd() { return PSP_GetKernelMemoryBase() + Memory::g_MemorySize;}
+// Where the user memory partition ends. Usually PSP_GetUserMemoryEnd(), which is the end of mapped RAM.
+inline u32 PSP_GetUserPartitionEnd() { return PSP_GetKernelMemoryBase() + (Memory::g_UserPartitionSize ? Memory::g_UserPartitionSize : Memory::g_MemorySize); }
 constexpr u32 PSP_GetKernelMemoryEnd() { return 0x08400000;}
 
 // "Volatile" RAM is between 0x08400000 and 0x08800000, can be requested by the

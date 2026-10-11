@@ -115,7 +115,8 @@ public:
 		case GE_VTYPE_IDX_16BIT:
 			return indices16[index];
 		case GE_VTYPE_IDX_32BIT:
-			return indices32[index];
+			// The PSP supports 32-bit indices in name only: it ignores the upper 16 bits.
+			return indices32[index] & 0xFFFF;
 		default:
 			return index;
 		}
@@ -137,6 +138,9 @@ typedef void (*JittedVertexDecoder)(const u8 *src, u8 *dst, int count, const UVS
 
 struct VertexDecoderOptions {
 	bool expand8BitNormalsToFloat;
+	// Weighted vertices outside through mode get no position or normal, only room for them as floats: the
+	// software renderer skins them itself, as the GE does.
+	bool callerSkins;
 };
 
 inline uint32_t GetVertTypeID(uint32_t vertType, int uvGenMode) {

@@ -581,6 +581,7 @@ void VulkanRenderManager::CompileThreadFunc() {
 			}
 			toCompile = std::move(compileQueue_);
 			compileQueue_.clear();
+			compileScheduling_ = true;
 			if (!runCompileThread_) {
 				exitAfterCompile = true;
 			}
@@ -624,6 +625,11 @@ void VulkanRenderManager::CompileThreadFunc() {
 
 			Task *task = new CreateMultiPipelinesTask(vulkan_, entries);
 			g_threadManager.EnqueueTask(task);
+		}
+
+		{
+			std::unique_lock<std::mutex> lock(compileQueueMutex_);
+			compileScheduling_ = false;
 		}
 
 		if (exitAfterCompile) {
@@ -904,6 +910,16 @@ void VulkanRenderManager::ReportBadStateForDraw() {
 }
 
 int VulkanRenderManager::WaitForPipelines() {
+	// Pipelines still in the queue, or taken off it but not yet made into tasks, aren't in flight yet.
+	while (true) {
+		{
+			std::unique_lock<std::mutex> lock(compileQueueMutex_);
+			if (compileQueue_.empty() && !compileScheduling_) {
+				break;
+			}
+		}
+		sleep_ms(2, "pipeline-queue-wait");
+	}
 	return CreateMultiPipelinesTask::WaitForAll();
 }
 
@@ -1534,7 +1550,7 @@ void VulkanRenderManager::BlitFramebuffer(VKRFramebuffer *src, VkRect2D srcRect,
 	steps_.push_back(step);
 }
 
-VkImageView VulkanRenderManager::BindFramebufferAsTexture(VKRFramebuffer *fb, int binding, VkImageAspectFlags aspectBit, int layer) {
+VkImageView VulkanRenderManager::BindFramebufferAsTexture(VKRFramebuffer *fb, int binding, VkImageAspectFlags aspectBit, int layer, bool samples) {
 	_dbg_assert_(curRenderStep_ != nullptr);
 	_dbg_assert_(fb != nullptr);
 
@@ -1542,6 +1558,13 @@ VkImageView VulkanRenderManager::BindFramebufferAsTexture(VKRFramebuffer *fb, in
 	_dbg_assert_(aspectBit == VK_IMAGE_ASPECT_COLOR_BIT || aspectBit == VK_IMAGE_ASPECT_DEPTH_BIT);
 
 	// Mark the dependency, check for required transitions, and return the image.
+	if (samples && fb->msaaColor.image != VK_NULL_HANDLE) {
+		_dbg_assert_(aspectBit == VK_IMAGE_ASPECT_COLOR_BIT);
+		curRenderStep_->dependencies.insert(fb);
+		TransitionRequest rq{ fb, aspectBit, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true };
+		curRenderStep_->preTransitions.insert(rq);
+		return layer == -1 ? fb->msaaColor.texAllLayersView : fb->msaaColor.texLayerViews[layer];
+	}
 
 	// Optimization: If possible, use final*Layout to put the texture into the correct layout "early".
 	for (int i = (int)steps_.size() - 1; i >= 0; i--) {
@@ -1655,7 +1678,9 @@ void VulkanRenderManager::Run(VKRRenderThreadTask &task) {
 				// Do the increment.
 				outOfDateFrames_++;
 			} else if (res == VK_SUBOPTIMAL_KHR) {
-				outOfDateFrames_++;
+				if (!vulkan_->SwapchainTransformMismatch()) {
+					outOfDateFrames_++;
+				}
 			} else if (res == VK_ERROR_SURFACE_LOST_KHR) {
 				// _dbg_assert_msg_(false, "vkQueuePresentKHR failed with VK_ERROR_SURFACE_LOST_KHR! result=%s", VulkanResultToString(res));
 				// Can't really do anything about this here, but let's try to continue anyway, maybe the app is in the process of being switched

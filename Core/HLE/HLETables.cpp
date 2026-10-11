@@ -350,6 +350,9 @@ void RegisterAllModules() {
 	Register_sceVideocodec();
 
 	// add new modules here.
+	Register_SystemCtrlForKernel();
+	Register_sceGe_driver();
+	Register_sceMePower_driver();
 
 	// Not ready to enable this due to apparent softlocks in Patapon 3.
 	// Register_sceNpMatching2();

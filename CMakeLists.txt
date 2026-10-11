@@ -508,10 +508,11 @@ if(NOT MSVC)
 	endif()
 
 	if(IOS)
-		set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0")
+		# Set by cmake/Toolchains/ios.cmake.
+		set(CMAKE_OSX_DEPLOYMENT_TARGET ${IPHONEOS_DEPLOYMENT_TARGET})
 	elseif(APPLE AND NOT CMAKE_CROSSCOMPILING)
-		# The oldest libc++ in current Xcode supports ("The selected platform is no longer supported" below).
-		set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
+		# The bundled MoltenVK (ext/vulkan/macOS) needs 12.0.
+		set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0")
 		add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-stdlib=libc++>" -U__STRICT_ANSI__)
 		set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")
 	elseif(NOT ANDROID)
@@ -925,8 +926,10 @@ if(ANDROID)
 		android/jni/app-android.cpp
 		android/jni/AndroidAudio.cpp
 		android/jni/AndroidAudio.h
-		android/jni/OpenSLContext.cpp
-		android/jni/OpenSLContext.h
+		android/jni/AndroidEGLGraphicsContext.cpp
+		android/jni/AndroidEGLGraphicsContext.h
+		android/jni/OboeContext.cpp
+		android/jni/OboeContext.h
 	)
 	# No target
 elseif(IOS AND NOT LIBRETRO)
@@ -952,13 +955,6 @@ elseif(IOS AND NOT LIBRETRO)
 		ios/CameraHelper.h
 		ios/LocationHelper.mm
 		ios/LocationHelper.h
-		ios/PPSSPPUIApplication.h
-		ios/PPSSPPUIApplication.mm
-		ios/SmartKeyboardMap.cpp
-		ios/SmartKeyboardMap.hpp
-		ios/iCade/iCadeReaderView.h
-		ios/iCade/iCadeReaderView.m
-		ios/iCade/iCadeState.h
 		Common/Battery/AppleBatteryClient.m
 	)
 
@@ -968,6 +964,12 @@ elseif(IOS AND NOT LIBRETRO)
 	endif()
 	if(EXISTS "${CMAKE_IOS_SDK_ROOT}/System/Library/Frameworks/PhotosUI.framework")
 		list(APPEND targetExtraLibs "-weak_framework PhotosUI")
+	endif()
+	# Weak, since it's iOS 14+ and we still run on 13.
+	list(APPEND targetExtraLibs "-weak_framework UniformTypeIdentifiers")
+	if(USE_IAP)
+		# Adding the In-App Purchase capability in Xcode did this. There's no entitlement for it on iOS.
+		list(APPEND targetExtraLibs "-framework StoreKit")
 	endif()
 
 	if(NOT ICONV_LIBRARY)
@@ -982,8 +984,6 @@ elseif(IOS AND NOT LIBRETRO)
 		ios/ViewControllerMetal.mm
 		ios/iOSCoreAudio.mm
 		ios/IAPManager.mm
-		ios/PPSSPPUIApplication.mm
-		ios/iCade/iCadeReaderView.m
 		ios/main.mm
 		ios/CameraHelper.mm
 		ios/LocationHelper.mm
@@ -1135,8 +1135,9 @@ add_subdirectory(GPU)
 add_subdirectory(Core)
 
 if(ANDROID AND NOT LIBRETRO)
+	add_subdirectory(ext/oboe-build)
 	add_library(ppsspp_jni SHARED ${AndroidJniSource})
-	target_link_libraries(ppsspp_jni Core log EGL OpenSLES)
+	target_link_libraries(ppsspp_jni Core log EGL oboe)
 	if(TARGET ppsspp_ui)
 		target_link_libraries(ppsspp_jni ppsspp_ui)
 	endif()
@@ -1157,6 +1158,8 @@ set(WindowsFiles
 	Windows/WindowsAudio.h
 	Windows/WASAPIContext.cpp
 	Windows/WASAPIContext.h
+	Windows/WASAPIMicrophone.cpp
+	Windows/WASAPIMicrophone.h
 	Windows/Debugger/BreakpointWindow.cpp
 	Windows/Debugger/BreakpointWindow.h
 	Windows/Debugger/DumpMemoryWindow.cpp
@@ -1373,11 +1376,12 @@ if(UNITTEST)
 		unittest/TestZipSlip.cpp
 		unittest/TestLzrc.cpp
 		unittest/TestMpegCsc.cpp
+		unittest/TestSplineTessellation.cpp
+		unittest/TestGEMath.cpp
 		unittest/TestDemangle.cpp
 		unittest/TestTextureReplacer.cpp
 		unittest/TestRiscVEmitter.cpp
 		unittest/TestLoongArch64Emitter.cpp
-		unittest/TestSoftwareGPUJit.cpp
 		unittest/TestThreadManager.cpp
 		unittest/JitHarness.cpp
 		Core/MIPS/ARM/ArmRegCache.cpp
@@ -1545,11 +1549,8 @@ if(NOT ANDROID)
 endif()
 # packaging and code signing
 if(IOS AND NOT LIBRETRO)
-	if(IOS_APP_STORE)
-		set(DEPLOYMENT_TARGET 13.0)
-	else()
-		set(DEPLOYMENT_TARGET 11.0)
-	endif()
+	# Set by cmake/Toolchains/ios.cmake.
+	set(DEPLOYMENT_TARGET ${IPHONEOS_DEPLOYMENT_TARGET})
 	file(GLOB IOSAssets ios/assets/*.png)
 	list(REMOVE_ITEM IOSAssets ${CMAKE_CURRENT_SOURCE_DIR}/ios/assets/Default-568h@2x.png)
 	list(REMOVE_ITEM IOSAssets ${CMAKE_CURRENT_SOURCE_DIR}/ios/assets/Default-568h@3x.png)
