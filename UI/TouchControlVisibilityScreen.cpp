@@ -23,12 +23,66 @@
 #include "Common/UI/PopupScreens.h"
 #include "Common/UI/ScreenManager.h"
 
+#include <algorithm>
+
 #include "Core/Config.h"
 
 #include "UI/TouchControlVisibilityScreen.h"
 #include "UI/CustomButtonMappingScreen.h"
 
 static const int leftColumnWidth = 140;
+
+class CustomKeySizeSliderScreen : public UI::PopupScreen {
+public:
+	explicit CustomKeySizeSliderScreen(float size)
+		: PopupScreen("Set size to all Custom Keys", "OK", "Cancel"), size_(size) {
+	}
+
+	void CreatePopupContents(UI::ViewGroup *parent) override {
+		using namespace UI;
+		SliderFloat *slider = parent->Add(new SliderFloat(&size_, 0.5f, 3.0f,
+			new LinearLayoutParams(Margins(12.0f, 16.0f))));
+		slider->OnChange.Add([this](EventParams &) {
+			size_ = std::clamp(size_, 0.5f, 3.0f);
+		});
+	}
+
+	const char *tag() const override { return "CustomKeySizeSlider"; }
+
+protected:
+	void OnCompleted(DialogResult result) override {
+		if (result != DR_OK) {
+			return;
+		}
+		const float size = std::clamp(size_, 0.5f, 3.0f);
+		for (int i = 0; i < TouchControlConfig::CUSTOM_BUTTON_COUNT; ++i) {
+			g_Config.touchControlsLandscape.touchCustom[i].scale = size;
+			g_Config.touchControlsPortrait.touchCustom[i].scale = size;
+		}
+		g_Config.Save("TouchControlVisibilityScreen::setCustomKeySize");
+	}
+
+private:
+	float size_;
+};
+
+class CustomKeySizeChoice : public UI::Choice {
+public:
+	CustomKeySizeChoice(float size, std::string_view text, ScreenManager *screenManager)
+		: Choice(text), size_(size), screenManager_(screenManager) {
+		OnClick.Add([this](UI::EventParams &e) {
+			auto popup = new CustomKeySizeSliderScreen(size_);
+			if (e.v) {
+				popup->SetPopupOrigin(e.v);
+			}
+			screenManager_->push(popup);
+		});
+	}
+
+private:
+	float size_;
+	ScreenManager *screenManager_;
+};
 
 class CheckBoxChoice : public UI::Choice {
 public:
@@ -65,6 +119,10 @@ void TouchControlVisibilityScreen::CreateContextMenu(UI::ViewGroup *parent) {
 		}
 		nextToggleAll_ = !nextToggleAll_;
 	});
+
+		parent->Add(new CustomKeySizeChoice(
+		std::clamp(g_Config.touchControlsLandscape.touchCustom[0].scale, 0.5f, 3.0f),
+		"Set size to all Custom Keys", screenManager()));
 }
 
 void TouchControlVisibilityScreen::CreateDialogViews(UI::ViewGroup *parent) {
@@ -118,15 +176,27 @@ void TouchControlVisibilityScreen::CreateDialogViews(UI::ViewGroup *parent) {
 
 		Choice *choice;
 		if (toggle.handle) {
-			// Handle custom button strings differently, and hackily. But will extend to arbitrary button counts.
-			char translated[256];
-			int i = 0;
-			if (sscanf(toggle.key.c_str(), "Custom %d", &i) == 1) {
-				snprintf(translated, sizeof(translated), mc->T_cstr("Custom %d"), i);
+			// Custom buttons use their summary text when one is configured.
+			// Otherwise show the same icon used by the ComboKey itself.
+			int customIndex = -1;
+			if (sscanf(toggle.key.c_str(), "Custom %d", &customIndex) == 1) {
+				--customIndex;
+				if (customIndex >= 0 && customIndex < TouchControlConfig::CUSTOM_BUTTON_COUNT) {
+					const std::string &summary = g_Config.sCustomButtonSummaryText[customIndex];
+					if (!summary.empty()) {
+						CustomKeyData::Sanitize(g_Config.CustomButton[customIndex]);
+						const ImageID icon = CustomKeyData::customKeyImages[g_Config.CustomButton[customIndex].image].i;
+						choice = new Choice(summary, icon, new LinearLayoutParams(1.0f));
+					} else {
+						CustomKeyData::Sanitize(g_Config.CustomButton[customIndex]);
+						choice = new Choice(CustomKeyData::customKeyImages[g_Config.CustomButton[customIndex].image].i, new LinearLayoutParams(1.0f));
+					}
+				} else {
+					choice = new Choice(mc->T(toggle.key), "", new LinearLayoutParams(1.0f));
+				}
 			} else {
-				truncate_cpy(translated, sizeof(translated), mc->T(toggle.key));
+				choice = new Choice(mc->T(toggle.key), "", new LinearLayoutParams(1.0f));
 			}
-			choice = new Choice(std::string(translated) + " (" + std::string(mc->T("tap to customize")) + ")", "", new LinearLayoutParams(1.0f));
 			choice->OnClick.Add(toggle.handle);
 		} else if (toggle.img.isValid()) {
 			choice = new CheckBoxChoice(toggle.img, checkbox, new LinearLayoutParams(1.0f));
