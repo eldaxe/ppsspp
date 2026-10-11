@@ -494,9 +494,14 @@ public:
 	bool bDisableDpadDiagonals;
 	bool bGamepadOnlyFocused;
 
-	// Control Style
+	// On-screen button appearance and pressed feedback.
 	int iTouchButtonStyle;
+	int iTouchButtonPressedStyle;
 	int iTouchButtonOpacity;
+	int iTouchButtonSurfaceAlpha;
+	// Press feedback scale multipliers in percent (100 = unchanged size).
+	int iTouchButtonEnlargePercent;
+	int iTouchButtonShrinkPercent;
 	int iTouchButtonHideSeconds;
 
 	// Snap touch control position
