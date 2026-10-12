@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <utility>
 #include <cstring>
+#include <stdexcept>
 #include "UI/MemoryScannerScreen.h"
 #include "Common/UI/Context.h"
 #include "Common/UI/UIScreen.h"
@@ -79,6 +80,16 @@ void MemoryScannerScreen::CreateViews() {
 	MemoryScanner *scanner = g_MemoryScanner.GetActive();
 
 	searchValueEdit_ = root_->Add(new PopupTextInputChoice(GetRequesterToken(), &scanner->searchValue, se->T("Value to search"), se->T("Enter value"), -1, screenManager(), new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
+
+	LinearLayout *addressRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
+	addressRow->Add(new TextView(se->T("Search Address"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
+	addressSearchEdit_ = addressRow->Add(new PopupTextInputChoice(GetRequesterToken(), &addressSearch_, "", se->T("RAM address, e.g. 0x0974A618"), -1, screenManager(), new LinearLayoutParams(1.0f)));
+	addressRow->Add(new Button(se->T("Search"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) { SearchAddress(addressSearch_, false); });
+
+	LinearLayout *cwcheatRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
+	cwcheatRow->Add(new TextView(se->T("Search CWCheat"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
+	cwcheatSearchEdit_ = cwcheatRow->Add(new PopupTextInputChoice(GetRequesterToken(), &cwcheatSearch_, "", se->T("CWCheat address, e.g. 0x00F4A618"), -1, screenManager(), new LinearLayoutParams(1.0f)));
+	cwcheatRow->Add(new Button(se->T("Search"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) { SearchAddress(cwcheatSearch_, true); });
 
 	LinearLayout *typeRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL));
 	typeRow->Add(new TextView(se->T("Value Type"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
@@ -210,6 +221,49 @@ void MemoryScannerScreen::RebuildResultsList() {
 		});
 
 
+	}
+}
+
+void MemoryScannerScreen::SearchAddress(const std::string &text, bool cwcheat) {
+	MemoryScanner *scanner = g_MemoryScanner.GetActive();
+	auto se = GetI18NCategory(I18NCat::SEARCH);
+	try {
+		std::string addressText = StripSpaces(text);
+		if (addressText.empty()) throw std::invalid_argument("empty address");
+		ScanValueType type = scanner->valueType;
+		uint32_t address = 0;
+		if (cwcheat) {
+			if (addressText.rfind("_L", 0) == 0) {
+				addressText = StripSpaces(addressText.substr(2));
+				size_t separator = addressText.find_first_of(" \\t");
+				if (separator != std::string::npos) addressText.resize(separator);
+			}
+			if (addressText.find_first_of(" \\t\\r\\n") != std::string::npos) throw std::invalid_argument("invalid CWCheat address");
+			uint32_t codeAddress = (uint32_t)std::stoul(addressText, nullptr, 16);
+			uint32_t opcode = codeAddress & 0xF0000000;
+			if (opcode == 0x00000000) type = ScanValueType::U8;
+			else if (opcode == 0x10000000) type = ScanValueType::U16;
+			else if (opcode == 0x20000000) type = ScanValueType::U32;
+			else throw std::invalid_argument("unsupported CWCheat opcode");
+			address = 0x08800000 + (codeAddress & 0x0FFFFFFF);
+		} else {
+			address = (uint32_t)std::stoul(addressText, nullptr, 0);
+		}
+		const uint32_t start = 0x08000000;
+		const uint32_t end = start + Memory::g_MemorySize;
+		if (address < start || address >= end) throw std::out_of_range("address outside PSP RAM");
+		for (const auto &result : scanner->GetResults()) {
+			if (result.address == address && result.type == type) {
+				g_OSD.Show(OSDType::MESSAGE_INFO, se->T("Address already in results"), 2.0f);
+				return;
+			}
+		}
+		ScanResult result(address, type);
+		scanner->GetResults().insert(scanner->GetResults().begin(), result);
+		g_OSD.Show(OSDType::MESSAGE_INFO, se->T("Address added to results"), 2.0f);
+		RebuildResultsList();
+	} catch (...) {
+		g_OSD.Show(OSDType::MESSAGE_ERROR, se->T(cwcheat ? "Invalid CWCheat address" : "Invalid RAM address"), 3.0f);
 	}
 }
 

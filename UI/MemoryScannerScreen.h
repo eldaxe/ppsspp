@@ -44,11 +44,16 @@ private:
 	void OnNextScan(UI::EventParams &e);
 	void OnClear(UI::EventParams &e);
 	void OnValueChange(uint32_t addr, ScanValueType type, const std::string &value);
+	void SearchAddress(const std::string &text, bool cwcheat);
 
 	Path gamePath_;
 
 	UI::TextView *countText_ = nullptr;
 	PopupTextInputChoice *searchValueEdit_ = nullptr;
+	PopupTextInputChoice *addressSearchEdit_ = nullptr;
+	PopupTextInputChoice *cwcheatSearchEdit_ = nullptr;
+	std::string addressSearch_;
+	std::string cwcheatSearch_;
 	UI::LinearLayout *resultsList_ = nullptr;
 	std::vector<PopupTextInputChoice *> valueChoices_;
 	std::vector<std::string> editValues_;
