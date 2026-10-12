@@ -26,7 +26,9 @@
 #include "Common/UI/ViewGroup.h"
 #include "Core/MemoryScanner.h"
 
+namespace UI {
 class PopupTextInputChoice;
+}
 
 class MemoryScannerScreen : public UIDialogScreen {
 public:
@@ -49,13 +51,13 @@ private:
 	Path gamePath_;
 
 	UI::TextView *countText_ = nullptr;
-	PopupTextInputChoice *searchValueEdit_ = nullptr;
-	PopupTextInputChoice *addressSearchEdit_ = nullptr;
-	PopupTextInputChoice *cwcheatSearchEdit_ = nullptr;
+	UI::PopupTextInputChoice *searchValueEdit_ = nullptr;
+	UI::PopupTextInputChoice *addressSearchEdit_ = nullptr;
+	UI::PopupTextInputChoice *cwcheatSearchEdit_ = nullptr;
 	std::string addressSearch_;
 	std::string cwcheatSearch_;
 	UI::LinearLayout *resultsList_ = nullptr;
-	std::vector<PopupTextInputChoice *> valueChoices_;
+	std::vector<UI::PopupTextInputChoice *> valueChoices_;
 	std::vector<std::string> editValues_;
 	std::vector<uint32_t> resultAddresses_;
 	std::vector<ScanValueType> resultTypes_;
