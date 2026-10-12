@@ -19,6 +19,8 @@
 #include <utility>
 #include <cmath>
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 
 #include "Core/MemoryScanner.h"
 #include "Core/MemMap.h"
@@ -45,152 +47,169 @@ struct FloatRange {
 
 static FloatRange ParseFloatRange(const std::string &filter) {
 	FloatRange range;
-	if (filter.size() < 2 || filter.substr(filter.size() - 2) != ".*") {
+	if (filter.size() < 2 || filter.substr(filter.size() - 2) != ".*")
 		return range;
-	}
 	std::string prefix = filter.substr(0, filter.size() - 2);
-	if (prefix.empty()) return range;
-	if (prefix == "-") return range;
-
+	if (prefix.empty() || prefix == "-")
+		return range;
 	try {
-		range.lower = std::stof(prefix);
+		size_t parsed = 0;
+		range.lower = std::stof(prefix, &parsed);
+		if (parsed != prefix.size() || !std::isfinite(range.lower))
+			return FloatRange{};
 		float inc = 1.0f;
 		size_t dotPos = prefix.find('.');
 		if (dotPos != std::string::npos) {
 			size_t digits = prefix.size() - dotPos - 1;
 			inc = powf(0.1f, (float)digits);
 		}
-		if (prefix[0] == '-') {
-			range.upper = range.lower - inc;
-		} else {
-			range.upper = range.lower + inc;
-		}
+		range.upper = prefix[0] == '-' ? range.lower - inc : range.lower + inc;
 		range.valid = true;
 	} catch (...) {
 	}
 	return range;
 }
 
+static bool ParseScanValue(ScanValueType type, const std::string &filter, uint32_t *value, float *floatValue, FloatRange *range, bool *wildcard) {
+	*wildcard = false;
+	try {
+		if (type == ScanValueType::FLOAT) {
+			if (filter.size() >= 2 && filter.substr(filter.size() - 2) == ".*") {
+				*range = ParseFloatRange(filter);
+				if (!range->valid) return false;
+				*wildcard = true;
+			} else {
+				size_t parsed = 0;
+				*floatValue = std::stof(filter, &parsed);
+				if (parsed != filter.size() || !std::isfinite(*floatValue)) return false;
+			}
+		} else {
+			size_t parsed = 0;
+			unsigned long long parsedValue = std::stoull(filter, &parsed, 0);
+			if (parsed != filter.size()) return false;
+			uint64_t maxValue = type == ScanValueType::U8 ? UINT8_MAX : type == ScanValueType::U16 ? UINT16_MAX : UINT32_MAX;
+			if (parsedValue > maxValue) return false;
+			*value = (uint32_t)parsedValue;
+		}
+	} catch (...) {
+		return false;
+	}
+	return true;
+}
+
+static uint32_t ReadScanBits(uint32_t address, ScanValueType type) {
+	switch (type) {
+	case ScanValueType::U8: return Memory::ReadUnchecked_U8(address);
+	case ScanValueType::U16: return Memory::ReadUnchecked_U16(address);
+	case ScanValueType::U32: return Memory::ReadUnchecked_U32(address);
+	case ScanValueType::FLOAT: {
+		uint32_t bits;
+		float value = Memory::ReadUnchecked_Float(address);
+		memcpy(&bits, &value, sizeof(bits));
+		return bits;
+	}
+	}
+	return 0;
+}
+
+static bool IsValidScanRange(uint32_t address, ScanValueType type, uint32_t start, uint32_t end) {
+	uint32_t size = type == ScanValueType::U8 ? 1 : type == ScanValueType::U16 ? 2 : 4;
+	return address >= start && address <= end && size <= end - address;
+}
+
 void MemoryScanner::FirstScan(ScanValueType type, const std::string &filter) {
-	results_.clear();
 	uint32_t val = 0;
 	float fval = 0.0f;
 	FloatRange frange;
 	bool isWildcard = false;
-	try {
-		if (type == ScanValueType::FLOAT) {
-			if (filter.size() >= 2 && filter.substr(filter.size() - 2) == ".*") {
-				frange = ParseFloatRange(filter);
-				if (frange.valid) {
-					isWildcard = true;
-				} else {
-					return;
-				}
-			} else {
-				fval = std::stof(filter);
-			}
-		} else {
-			val = (uint32_t)std::stoul(filter, nullptr, 0);
-		}
-	} catch (...) {
+	if (!ParseScanValue(type, filter, &val, &fval, &frange, &isWildcard))
 		return;
-	}
 
-	uint32_t startAddr = 0x08000000;
-	uint32_t endAddr = startAddr + Memory::g_MemorySize;
+	const uint32_t startAddr = 0x08000000;
+	const uint32_t endAddr = startAddr + Memory::g_MemorySize;
+	std::vector<ScanResult> newResults;
+	newResults.reserve(1000);
 
-	for (uint32_t addr = startAddr; addr < endAddr; ) {
+	for (uint32_t addr = startAddr; IsValidScanRange(addr, type, startAddr, endAddr); ++addr) {
 		bool match = false;
-		switch (type) {
-		case ScanValueType::U8:
-			if (Memory::ReadUnchecked_U8(addr) == (uint8_t)val) match = true;
-			addr += 1;
-			break;
-		case ScanValueType::U16:
-			if (addr + 2 <= endAddr && Memory::ReadUnchecked_U16(addr) == (uint16_t)val) match = true;
-			addr += 1;
-			break;
-		case ScanValueType::U32:
-			if (addr + 4 <= endAddr && Memory::ReadUnchecked_U32(addr) == (uint32_t)val) match = true;
-			addr += 1;
-			break;
-		case ScanValueType::FLOAT:
-			if (addr + 4 <= endAddr) {
-				float v = Memory::ReadUnchecked_Float(addr);
-				if (isWildcard) {
-					if (frange.Match(v)) match = true;
-				} else {
-					if (v == fval) match = true;
-				}
-			}
-			addr += 1;
-			break;
+		if (type == ScanValueType::FLOAT) {
+			float current = Memory::ReadUnchecked_Float(addr);
+			match = isWildcard ? frange.Match(current) : current == fval;
+		} else {
+			uint32_t current = ReadScanBits(addr, type);
+			uint32_t mask = type == ScanValueType::U8 ? UINT8_MAX : type == ScanValueType::U16 ? UINT16_MAX : UINT32_MAX;
+			match = current == (val & mask);
 		}
-
 		if (match) {
-			results_.emplace_back(addr - 1, type);
-			if (results_.size() > 1000) break;
+			ScanResult result(addr, type);
+			result.previousValue = ReadScanBits(addr, type);
+			newResults.push_back(result);
+			if (newResults.size() >= 1000)
+				break;
 		}
 	}
+	results_ = std::move(newResults);
+	valueType = type;
 	firstScanDone_ = true;
 }
 
-void MemoryScanner::NextScan(ScanValueType type, const std::string &filter) {
+void MemoryScanner::NextScan(ScanValueType type, const std::string &filter, ScanFilterMode mode) {
 	uint32_t val = 0;
 	float fval = 0.0f;
 	FloatRange frange;
 	bool isWildcard = false;
-	try {
-		if (type == ScanValueType::FLOAT) {
-			if (filter.size() >= 2 && filter.substr(filter.size() - 2) == ".*") {
-				frange = ParseFloatRange(filter);
-				if (frange.valid) {
-					isWildcard = true;
-				} else {
-					return;
-				}
-			} else {
-				fval = std::stof(filter);
-			}
-		} else {
-			val = (uint32_t)std::stoul(filter, nullptr, 0);
-		}
-	} catch (...) {
+	if (mode == ScanFilterMode::Exact && !ParseScanValue(type, filter, &val, &fval, &frange, &isWildcard))
 		return;
-	}
 
 	std::vector<ScanResult> nextResults;
-	for (const auto &res : results_) {
+	nextResults.reserve(results_.size());
+	for (auto res : results_) {
+		// Keep each result's original type; changing the type selector must not
+		// reinterpret an existing address as a different value width.
+		if (res.type != type)
+			continue;
+		uint32_t currentBits = ReadScanBits(res.address, res.type);
 		bool match = false;
-		switch (type) {
-		case ScanValueType::U8:
-			if (Memory::ReadUnchecked_U8(res.address) == (uint8_t)val) match = true;
-			break;
-		case ScanValueType::U16:
-			if (Memory::ReadUnchecked_U16(res.address) == (uint16_t)val) match = true;
-			break;
-		case ScanValueType::U32:
-			if (Memory::ReadUnchecked_U32(res.address) == (uint32_t)val) match = true;
-			break;
-		case ScanValueType::FLOAT:
-			{
-				float v = Memory::ReadUnchecked_Float(res.address);
-				if (isWildcard) {
-					if (frange.Match(v)) match = true;
-				} else {
-					if (v == fval) match = true;
-				}
+		if (mode == ScanFilterMode::Exact) {
+			if (type == ScanValueType::FLOAT) {
+				float current = Memory::ReadUnchecked_Float(res.address);
+				match = isWildcard ? frange.Match(current) : current == fval;
+			} else {
+				uint32_t mask = type == ScanValueType::U8 ? UINT8_MAX : type == ScanValueType::U16 ? UINT16_MAX : UINT32_MAX;
+				match = currentBits == (val & mask);
 			}
-			break;
+		} else if (type == ScanValueType::FLOAT) {
+			float current, previous;
+			memcpy(&current, &currentBits, sizeof(current));
+			memcpy(&previous, &res.previousValue, sizeof(previous));
+			switch (mode) {
+			case ScanFilterMode::Changed: match = current != previous; break;
+			case ScanFilterMode::Unchanged: match = current == previous; break;
+			case ScanFilterMode::Increased: match = current > previous; break;
+			case ScanFilterMode::Decreased: match = current < previous; break;
+			case ScanFilterMode::Exact: break;
+			}
+		} else {
+			uint32_t mask = type == ScanValueType::U8 ? UINT8_MAX : type == ScanValueType::U16 ? UINT16_MAX : UINT32_MAX;
+			uint32_t current = currentBits & mask;
+			uint32_t previous = res.previousValue & mask;
+			switch (mode) {
+			case ScanFilterMode::Changed: match = current != previous; break;
+			case ScanFilterMode::Unchanged: match = current == previous; break;
+			case ScanFilterMode::Increased: match = current > previous; break;
+			case ScanFilterMode::Decreased: match = current < previous; break;
+			case ScanFilterMode::Exact: break;
+			}
 		}
-
-		if (match) {
+		// Snapshot current value even for matches that remain, for the next
+		// relative filter operation.
+		res.previousValue = currentBits;
+		if (match)
 			nextResults.push_back(res);
-		}
 	}
 	results_ = std::move(nextResults);
+	valueType = type;
 }
-
 void MemoryScanner::Clear() {
 	results_.clear();
 	firstScanDone_ = false;
