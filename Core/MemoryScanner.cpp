@@ -178,7 +178,9 @@ void MemoryScanner::NextScan(ScanValueType type, const std::string &filter, Scan
 				uint32_t mask = type == ScanValueType::U8 ? UINT8_MAX : type == ScanValueType::U16 ? UINT16_MAX : UINT32_MAX;
 				match = currentBits == (val & mask);
 			}
-		} else if (type == ScanValueType::FLOAT) {
+		} else if (res.type == ScanValueType::FLOAT) {
+			// Compare against the snapshot using the result's original type.
+			// The UI's selected type must not reinterpret existing scan results.
 			float current, previous;
 			memcpy(&current, &currentBits, sizeof(current));
 			memcpy(&previous, &res.previousValue, sizeof(previous));
@@ -190,7 +192,7 @@ void MemoryScanner::NextScan(ScanValueType type, const std::string &filter, Scan
 			case ScanFilterMode::Exact: break;
 			}
 		} else {
-			uint32_t mask = type == ScanValueType::U8 ? UINT8_MAX : type == ScanValueType::U16 ? UINT16_MAX : UINT32_MAX;
+			uint32_t mask = res.type == ScanValueType::U8 ? UINT8_MAX : res.type == ScanValueType::U16 ? UINT16_MAX : UINT32_MAX;
 			uint32_t current = currentBits & mask;
 			uint32_t previous = res.previousValue & mask;
 			switch (mode) {
