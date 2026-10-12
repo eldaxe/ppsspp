@@ -106,6 +106,19 @@ void MemoryScannerScreen::CreateViews() {
 		scanner->valueType = (ScanValueType)e.a;
 	});
 
+	LinearLayout *filterRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL));
+	filterRow->Add(new TextView(se->T("Filter Mode"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
+	ChoiceStrip *filterStrip = filterRow->Add(new ChoiceStrip(ORIENT_HORIZONTAL, new LinearLayoutParams(1.0f)));
+	filterStrip->AddChoice(se->T("Exact"));
+	filterStrip->AddChoice(se->T("Changed"));
+	filterStrip->AddChoice(se->T("Unchanged"));
+	filterStrip->AddChoice(se->T("Increased"));
+	filterStrip->AddChoice(se->T("Decreased"));
+	filterStrip->SetSelection((int)scanner->filterMode, false);
+	filterStrip->OnChoice.Add([scanner](EventParams &e) {
+		scanner->filterMode = (ScanFilterMode)e.a;
+	});
+
 	LinearLayout *buttonRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL));
 	buttonRow->Add(new Button(se->T("Filter Scan")))->OnClick.Handle(this, &MemoryScannerScreen::OnNextScan);
 	buttonRow->Add(new Button(di->T("Clear")))->OnClick.Handle(this, &MemoryScannerScreen::OnClear);
@@ -239,7 +252,10 @@ void MemoryScannerScreen::SearchAddress(const std::string &text, bool cwcheat) {
 				throw std::invalid_argument("CWCheat address must start with 0x");
 			if (addressText.find_first_of(" \\t\\r\\n") != std::string::npos || addressText.rfind("_L", 0) == 0)
 				throw std::invalid_argument("invalid CWCheat address");
-			uint32_t codeAddress = (uint32_t)std::stoul(addressText.substr(2), nullptr, 16);
+			size_t parsed = 0;
+			unsigned long long parsedAddress = std::stoull(addressText.substr(2), &parsed, 16);
+			if (parsed != addressText.size() - 2 || parsedAddress > UINT32_MAX) throw std::invalid_argument("invalid address");
+			uint32_t codeAddress = (uint32_t)parsedAddress;
 			uint32_t opcode = codeAddress & 0xF0000000;
 			if (opcode == 0x00000000) type = ScanValueType::U8;
 			else if (opcode == 0x10000000) type = ScanValueType::U16;
@@ -252,11 +268,15 @@ void MemoryScannerScreen::SearchAddress(const std::string &text, bool cwcheat) {
 				throw std::invalid_argument("RAM address must start with 0x");
 			if (addressText.find_first_of(" \\t\\r\\n") != std::string::npos)
 				throw std::invalid_argument("invalid RAM address");
-			address = (uint32_t)std::stoul(addressText.substr(2), nullptr, 16);
+			size_t parsed = 0;
+			unsigned long long parsedAddress = std::stoull(addressText.substr(2), &parsed, 16);
+			if (parsed != addressText.size() - 2 || parsedAddress > UINT32_MAX) throw std::invalid_argument("invalid address");
+			address = (uint32_t)parsedAddress;
 		}
 		const uint32_t start = 0x08000000;
 		const uint32_t end = start + Memory::g_MemorySize;
-		if (address < start || address >= end) throw std::out_of_range("address outside PSP RAM");
+		const uint32_t size = type == ScanValueType::U8 ? 1 : type == ScanValueType::U16 ? 2 : 4;
+		if (address < start || address > end || size > end - address) throw std::out_of_range("address outside PSP RAM");
 		for (const auto &result : scanner->GetResults()) {
 			if (result.address == address && result.type == type) {
 				g_OSD.Show(OSDType::MESSAGE_INFO, se->T("Address already in results"), 2.0f);
@@ -264,6 +284,12 @@ void MemoryScannerScreen::SearchAddress(const std::string &text, bool cwcheat) {
 			}
 		}
 		ScanResult result(address, type);
+		switch (type) {
+		case ScanValueType::U8: result.previousValue = Memory::ReadUnchecked_U8(address); break;
+		case ScanValueType::U16: result.previousValue = Memory::ReadUnchecked_U16(address); break;
+		case ScanValueType::U32: result.previousValue = Memory::ReadUnchecked_U32(address); break;
+		case ScanValueType::FLOAT: { float value = Memory::ReadUnchecked_Float(address); memcpy(&result.previousValue, &value, sizeof(value)); break; }
+		}
 		scanner->GetResults().insert(scanner->GetResults().begin(), result);
 		scanner->MarkScanDone();
 		g_OSD.Show(OSDType::MESSAGE_INFO, se->T("Address added to results"), 2.0f);
@@ -282,7 +308,7 @@ void MemoryScannerScreen::OnFirstScan(UI::EventParams &e) {
 void MemoryScannerScreen::OnNextScan(UI::EventParams &e) {
 	MemoryScanner *scanner = g_MemoryScanner.GetActive();
 	if (scanner->HasScanDone()) {
-		scanner->NextScan(scanner->valueType, scanner->searchValue);
+		scanner->NextScan(scanner->valueType, scanner->searchValue, scanner->filterMode);
 		RebuildResultsList();
 	}
 }
