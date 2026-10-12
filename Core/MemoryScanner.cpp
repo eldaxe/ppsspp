@@ -166,7 +166,7 @@ void MemoryScanner::NextScan(ScanValueType type, const std::string &filter, Scan
 	for (auto res : results_) {
 		// Keep each result's original type; changing the type selector must not
 		// reinterpret an existing address as a different value width.
-		if (res.type != type)
+		if (mode == ScanFilterMode::Exact && res.type != type)
 			continue;
 		uint32_t currentBits = ReadScanBits(res.address, res.type);
 		bool match = false;
