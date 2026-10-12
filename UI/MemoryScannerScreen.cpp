@@ -79,17 +79,19 @@ void MemoryScannerScreen::CreateViews() {
 
 	MemoryScanner *scanner = g_MemoryScanner.GetActive();
 
-	searchValueEdit_ = root_->Add(new PopupTextInputChoice(GetRequesterToken(), &scanner->searchValue, se->T("Value to search"), se->T("Enter value"), -1, screenManager(), new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
+	LinearLayout *scanValueRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
+	searchValueEdit_ = scanValueRow->Add(new PopupTextInputChoice(GetRequesterToken(), &scanner->searchValue, se->T("Scan Value"), se->T("Enter value"), -1, screenManager(), new LinearLayoutParams(1.0f)));
+	scanValueRow->Add(new Button(se->T("First Scan"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Handle(this, &MemoryScannerScreen::OnFirstScan);
 
 	LinearLayout *addressRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
-	addressRow->Add(new TextView(se->T("Search Address"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
+	addressRow->Add(new TextView(se->T("Scan Address"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
 	addressSearchEdit_ = addressRow->Add(new PopupTextInputChoice(GetRequesterToken(), &addressSearch_, "", se->T("RAM address, e.g. 0x0974A618"), -1, screenManager(), new LinearLayoutParams(1.0f)));
-	addressRow->Add(new Button(se->T("Search"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) { SearchAddress(addressSearch_, false); });
+	addressRow->Add(new Button(se->T("Scan"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) { SearchAddress(addressSearch_, false); });
 
 	LinearLayout *cwcheatRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
-	cwcheatRow->Add(new TextView(se->T("Search CWCheat"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
+	cwcheatRow->Add(new TextView(se->T("Scan CWCheat"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
 	cwcheatSearchEdit_ = cwcheatRow->Add(new PopupTextInputChoice(GetRequesterToken(), &cwcheatSearch_, "", se->T("CWCheat address, e.g. 0x00F4A618"), -1, screenManager(), new LinearLayoutParams(1.0f)));
-	cwcheatRow->Add(new Button(se->T("Search"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) { SearchAddress(cwcheatSearch_, true); });
+	cwcheatRow->Add(new Button(se->T("Scan"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) { SearchAddress(cwcheatSearch_, true); });
 
 	LinearLayout *typeRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL));
 	typeRow->Add(new TextView(se->T("Value Type"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
@@ -105,8 +107,7 @@ void MemoryScannerScreen::CreateViews() {
 	});
 
 	LinearLayout *buttonRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL));
-	buttonRow->Add(new Button(se->T("First Scan")))->OnClick.Handle(this, &MemoryScannerScreen::OnFirstScan);
-	buttonRow->Add(new Button(se->T("Next Scan")))->OnClick.Handle(this, &MemoryScannerScreen::OnNextScan);
+	buttonRow->Add(new Button(se->T("Filter Scan")))->OnClick.Handle(this, &MemoryScannerScreen::OnNextScan);
 	buttonRow->Add(new Button(di->T("Clear")))->OnClick.Handle(this, &MemoryScannerScreen::OnClear);
 
 	countText_ = root_->Add(new TextView(se->T("Results: 0"), new LinearLayoutParams(Margins(10, 10))));
