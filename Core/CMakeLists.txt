@@ -320,6 +320,8 @@ add_library(Core STATIC
 	CoreTiming.cpp
 	CoreTiming.h
 	CwCheat.cpp
+	MemoryScanner.cpp
+	MemoryScanner.h
 	CwCheat.h
 	FrameTiming.cpp
 	FrameTiming.h

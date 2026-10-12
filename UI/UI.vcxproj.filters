@@ -13,6 +13,9 @@
     <ClCompile Include="GameSettingsScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
+    <ClCompile Include="MemoryScannerScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
     <ClCompile Include="MainScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
@@ -172,6 +175,9 @@
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="GameSettingsScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryScannerScreen.h">
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="MainScreen.h">

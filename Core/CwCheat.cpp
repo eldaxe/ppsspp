@@ -12,6 +12,7 @@
 #include "Core/CoreTiming.h"
 #include "Core/CoreParameter.h"
 #include "Core/CwCheat.h"
+#include "Core/MemoryScanner.h"
 #include "Core/Config.h"
 #include "Core/MemMapHelpers.h"
 #include "Core/MIPS/MIPS.h"
@@ -326,6 +327,10 @@ void hleCheat(u64 userdata, int cyclesLate) {
 			currentMIPS->InvalidateICacheRangeDeferred(0x0886E138, 4);
 			currentMIPS->InvalidateICacheRangeDeferred(0x0886E258, 4);
 		}
+	}
+
+	if (!Achievements::HardcoreModeActive()) {
+		g_MemoryScanner.Update();
 	}
 
 	if (!cheatEngine || !cheatsEnabled) {

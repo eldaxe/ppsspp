@@ -104,6 +104,9 @@
     <ClCompile Include="..\..\UI\MiscScreens.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\UI\MemoryScannerScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\UI\PauseScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
@@ -255,6 +258,9 @@
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="..\..\UI\MiscScreens.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\UI\MemoryScannerScreen.h">
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="..\..\UI\PauseScreen.h">

@@ -47,6 +47,8 @@ list(APPEND UISource
 	IAPScreen.h
 	MainScreen.h
 	MainScreen.cpp
+	MemoryScannerScreen.h
+	MemoryScannerScreen.cpp
 	GameBrowser.h
 	GameBrowser.cpp
 	MiscScreens.h

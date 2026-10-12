@@ -315,6 +315,9 @@
     <ClCompile Include="Core.cpp">
       <Filter>Core</Filter>
     </ClCompile>
+    <ClCompile Include="MemoryScanner.cpp">
+      <Filter>Core</Filter>
+    </ClCompile>
     <ClCompile Include="CoreTiming.cpp">
       <Filter>Core</Filter>
     </ClCompile>
@@ -1832,6 +1835,9 @@
     </ClInclude>
     <ClInclude Include="MIPS\JitCommon\JitBlockCache.h">
       <Filter>MIPS\JitCommon</Filter>
+    </ClInclude>
+    <ClInclude Include="MemoryScanner.h">
+      <Filter>Core</Filter>
     </ClInclude>
     <ClInclude Include="Cwcheat.h">
       <Filter>Core</Filter>
