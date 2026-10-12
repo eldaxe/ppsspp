@@ -500,6 +500,7 @@ public:
 	int iTouchButtonHideSeconds;
 	// Extra raster resolution for SVG on-screen touch button assets. 0=1x, 1=2x, 2=4x, 3=8x.
 	int iTouchButtonAtlasScale;
+	bool bDisableTouchButtonShadows = false;
 
 	// Snap touch control position
 	bool bTouchSnapToGrid;

@@ -850,6 +850,12 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 			screenManager()->getUIContext()->InvalidateAtlas();
 		});
 
+		CheckBox *disableTouchShadows = controlsSettings->Add(new CheckBox(&g_Config.bDisableTouchButtonShadows, co->T("Disable shadow buttons")));
+		disableTouchShadows->SetEnabledPtr(&g_Config.bShowTouchControls);
+		disableTouchShadows->OnClick.Add([this](UI::EventParams &e) {
+			screenManager()->getUIContext()->InvalidateAtlas();
+		});
+
 		PopupSliderChoice *opacity = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 0, 100, 65, co->T("Button Opacity"), screenManager(), "%"));
 		opacity->SetEnabledPtr(&g_Config.bShowTouchControls);
 		opacity->SetFormat("%i%%");

@@ -394,11 +394,12 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, float touchScaleM
 	Instant shadowStart = Instant::Now();
 
 	// We can trivially parallelize shadowing/extension of the images.
-	ParallelRangeLoop(&g_threadManager, [&images, imageIDs](int start, int end) {
+	const bool disableTouchButtonShadows = g_Config.bDisableTouchButtonShadows;
+	ParallelRangeLoop(&g_threadManager, [&images, imageIDs, disableTouchButtonShadows](int start, int end) {
 		for (int i = start; i < end; i++) {
 			// Here we could exclude some images from the drop shadow, if desired.
 			if (!images[i].IsEmpty()) {
-				if (imageIDs[i].addShadow) {
+				if (imageIDs[i].addShadow && !disableTouchButtonShadows) {
 					// DEBUG_LOG(Log::G3D, "Adding drop shadow to %.*s", STR_VIEW(imageIDs[i].id));
 					AddDropShadow(images[i], 3, 0.66f);
 				} else {
@@ -500,10 +501,11 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, float touchScaleM
 static Image g_cachedUIAtlasImage;
 static float g_cachedDpiScale = 0.0f;
 static int g_cachedTouchAtlasScale = -1;
+static bool g_cachedDisableTouchButtonShadows = false;
 
 // The caller must cache the Atlas.
 Draw::Texture *GenerateUIAtlas(Draw::DrawContext *draw, Atlas *atlas, float dpiScale, bool invalidate) {
-	if (g_cachedUIAtlasImage.IsEmpty() || dpiScale != g_cachedDpiScale || g_Config.iTouchButtonAtlasScale != g_cachedTouchAtlasScale || invalidate) {
+	if (g_cachedUIAtlasImage.IsEmpty() || dpiScale != g_cachedDpiScale || g_Config.iTouchButtonAtlasScale != g_cachedTouchAtlasScale || g_Config.bDisableTouchButtonShadows != g_cachedDisableTouchButtonShadows || invalidate) {
 		INFO_LOG(Log::G3D, "Regenerating atlas (empty: %s). Dpi scale (changed: %s): %0.2f (invalidate=%d)",
 			g_cachedUIAtlasImage.IsEmpty() ? "true" : "false", dpiScale != g_cachedDpiScale ? "true" : "false", dpiScale, invalidate);
 
@@ -531,6 +533,7 @@ Draw::Texture *GenerateUIAtlas(Draw::DrawContext *draw, Atlas *atlas, float dpiS
 
 	g_cachedDpiScale = dpiScale;
 	g_cachedTouchAtlasScale = g_Config.iTouchButtonAtlasScale;
+	g_cachedDisableTouchButtonShadows = g_Config.bDisableTouchButtonShadows;
 
 	// Create the texture.
 	Draw::TextureDesc desc{};
