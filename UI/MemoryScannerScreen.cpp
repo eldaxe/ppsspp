@@ -233,13 +233,12 @@ void MemoryScannerScreen::SearchAddress(const std::string &text, bool cwcheat) {
 		ScanValueType type = scanner->valueType;
 		uint32_t address = 0;
 		if (cwcheat) {
-			if (addressText.rfind("_L", 0) == 0) {
-				addressText = StripSpaces(addressText.substr(2));
-				size_t separator = addressText.find_first_of(" \\t");
-				if (separator != std::string::npos) addressText.resize(separator);
-			}
-			if (addressText.find_first_of(" \\t\\r\\n") != std::string::npos) throw std::invalid_argument("invalid CWCheat address");
-			uint32_t codeAddress = (uint32_t)std::stoul(addressText, nullptr, 16);
+			// Require a single 0x-prefixed address word. Do not accept full _L lines.
+			if (addressText.compare(0, 2, "0x") != 0 && addressText.compare(0, 2, "0X") != 0)
+				throw std::invalid_argument("CWCheat address must start with 0x");
+			if (addressText.find_first_of(" \\t\\r\\n") != std::string::npos || addressText.rfind("_L", 0) == 0)
+				throw std::invalid_argument("invalid CWCheat address");
+			uint32_t codeAddress = (uint32_t)std::stoul(addressText.substr(2), nullptr, 16);
 			uint32_t opcode = codeAddress & 0xF0000000;
 			if (opcode == 0x00000000) type = ScanValueType::U8;
 			else if (opcode == 0x10000000) type = ScanValueType::U16;
@@ -247,7 +246,12 @@ void MemoryScannerScreen::SearchAddress(const std::string &text, bool cwcheat) {
 			else throw std::invalid_argument("unsupported CWCheat opcode");
 			address = 0x08800000 + (codeAddress & 0x0FFFFFFF);
 		} else {
-			address = (uint32_t)std::stoul(addressText, nullptr, 0);
+			// RAM addresses must be explicitly hexadecimal with a 0x prefix.
+			if (addressText.compare(0, 2, "0x") != 0 && addressText.compare(0, 2, "0X") != 0)
+				throw std::invalid_argument("RAM address must start with 0x");
+			if (addressText.find_first_of(" \\t\\r\\n") != std::string::npos)
+				throw std::invalid_argument("invalid RAM address");
+			address = (uint32_t)std::stoul(addressText.substr(2), nullptr, 16);
 		}
 		const uint32_t start = 0x08000000;
 		const uint32_t end = start + Memory::g_MemorySize;
