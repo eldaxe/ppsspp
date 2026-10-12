@@ -49,6 +49,7 @@ public:
 	[[nodiscard]] const std::vector<ScanResult> &GetResults() const { return results_; }
 	std::vector<ScanResult> &GetResults() { return results_; }
 	[[nodiscard]] bool HasScanDone() const { return firstScanDone_; }
+	void MarkScanDone() { firstScanDone_ = true; }
 
 	ScanValueType valueType = ScanValueType::U16;
 	std::string searchValue = "0";

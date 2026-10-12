@@ -260,6 +260,7 @@ void MemoryScannerScreen::SearchAddress(const std::string &text, bool cwcheat) {
 		}
 		ScanResult result(address, type);
 		scanner->GetResults().insert(scanner->GetResults().begin(), result);
+		scanner->MarkScanDone();
 		g_OSD.Show(OSDType::MESSAGE_INFO, se->T("Address added to results"), 2.0f);
 		RebuildResultsList();
 	} catch (...) {
