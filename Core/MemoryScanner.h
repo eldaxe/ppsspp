@@ -29,11 +29,20 @@ enum class ScanValueType {
 	FLOAT,
 };
 
+enum class ScanFilterMode {
+	Exact,
+	Changed,
+	Unchanged,
+	Increased,
+	Decreased,
+};
+
 struct ScanResult {
 	ScanResult(uint32_t addr = 0, ScanValueType t = ScanValueType::U8)
 		: address(addr), type(t) {}
 	uint32_t address;
 	ScanValueType type;
+	uint32_t previousValue = 0;
 	bool locked = false;
 	uint32_t lockValue = 0;
 };
@@ -41,7 +50,7 @@ struct ScanResult {
 class MemoryScanner {
 public:
 	void FirstScan(ScanValueType type, const std::string &filter);
-	void NextScan(ScanValueType type, const std::string &filter);
+	void NextScan(ScanValueType type, const std::string &filter, ScanFilterMode mode);
 	void Clear();
 	void Update();
 	bool SetLocked(size_t index, bool locked);
@@ -52,6 +61,7 @@ public:
 	void MarkScanDone() { firstScanDone_ = true; }
 
 	ScanValueType valueType = ScanValueType::U16;
+	ScanFilterMode filterMode = ScanFilterMode::Exact;
 	std::string searchValue = "0";
 
 private:
