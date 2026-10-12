@@ -242,8 +242,8 @@ void MemoryScannerScreen::SearchAddress(const std::string &text, bool cwcheat) {
 	MemoryScanner *scanner = g_MemoryScanner.GetActive();
 	auto se = GetI18NCategory(I18NCat::SEARCH);
 	try {
-		std::string addressText = StripSpaces(text);
-		if (addressText.empty()) throw std::invalid_argument("empty address");
+		std::string addressText = text;
+		if (addressText.empty() || addressText.find_first_of(" \\t\\r\\n") != std::string::npos) throw std::invalid_argument("invalid address");
 		ScanValueType type = scanner->valueType;
 		uint32_t address = 0;
 		if (cwcheat) {
@@ -338,7 +338,9 @@ void MemoryScannerScreen::OnValueChange(uint32_t addr, ScanValueType type, const
 
 	try {
 		if (type == ScanValueType::FLOAT) {
-			float fval = std::stof(value);
+			size_t parsed = 0;
+			float fval = std::stof(value, &parsed);
+			if (parsed != value.size() || !std::isfinite(fval)) throw std::invalid_argument("invalid float");
 			Memory::WriteUnchecked_Float(fval, addr);
 			for (auto &res : scanner->GetResults()) {
 				if (res.address == addr && res.locked) {
@@ -346,7 +348,12 @@ void MemoryScannerScreen::OnValueChange(uint32_t addr, ScanValueType type, const
 				}
 			}
 		} else {
-			uint32_t val = (uint32_t)std::stoul(value, nullptr, 0);
+			size_t parsed = 0;
+			unsigned long long parsedValue = std::stoull(value, &parsed, 0);
+			if (parsed != value.size()) throw std::invalid_argument("invalid value");
+			uint64_t maxValue = type == ScanValueType::U8 ? UINT8_MAX : type == ScanValueType::U16 ? UINT16_MAX : UINT32_MAX;
+			if (parsedValue > maxValue) throw std::out_of_range("value out of range");
+			uint32_t val = (uint32_t)parsedValue;
 			switch (type) {
 			case ScanValueType::U8: Memory::WriteUnchecked_U8((uint8_t)val, addr); break;
 			case ScanValueType::U16: Memory::WriteUnchecked_U16((uint16_t)val, addr); break;
