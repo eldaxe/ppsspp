@@ -153,7 +153,7 @@ void MemoryScannerScreen::update() {
 	// Update live values in the list.
 	// Only update if the UI is in sync with the current scanner results.
 	const auto &results = scanner->GetResults();
-	if (valueChoices_.size() == results.size()) {
+	if (valueChoices_.size() == std::min((size_t)500, results.size())) {
 		for (size_t i = 0; i < valueChoices_.size(); ++i) {
 			uint32_t addr = resultAddresses_[i];
 			ScanValueType type = resultTypes_[i];
@@ -200,7 +200,7 @@ void MemoryScannerScreen::RebuildResultsList() {
 	lockHeader->SetShadow(true);
 	lockHeader->SetPadding(Margins(16, 0));
 
-	const size_t visibleResults = results.size();
+	const size_t visibleResults = std::min((size_t)500, results.size());
 	editValues_.reserve(visibleResults);
 	for (size_t i = 0; i < visibleResults; ++i) {
 		LinearLayout *row = resultsList_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
