@@ -83,14 +83,7 @@ void MemoryScannerScreen::CreateViews() {
 
 	LinearLayout *scanValueRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
 	searchValueEdit_ = scanValueRow->Add(new PopupTextInputChoice(GetRequesterToken(), &scanner->searchValue, se->T("Scan Value"), se->T("Enter value"), -1, screenManager(), new LinearLayoutParams(1.0f)));
-	scanValueRow->Add(new Button(se->T("Scan"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) {
-		MemoryScanner *active = g_MemoryScanner.GetActive();
-		if (active->HasScanDone())
-			active->NextScan(active->valueType, active->searchValue, active->filterMode);
-		else
-			active->FirstScan(active->valueType, active->searchValue);
-		RebuildResultsList();
-	});
+	scanValueRow->Add(new Button(se->T("Scan"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Handle(this, &MemoryScannerScreen::OnFirstScan);
 
 	LinearLayout *addressRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
 	addressSearchEdit_ = addressRow->Add(new PopupTextInputChoice(GetRequesterToken(), &addressSearch_, se->T("Scan Address"), se->T("RAM address, e.g. 0x0974A618"), -1, screenManager(), new LinearLayoutParams(1.0f)));
@@ -122,6 +115,7 @@ void MemoryScannerScreen::CreateViews() {
 	});
 
 	LinearLayout *buttonRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL));
+	buttonRow->Add(new Button(se->T("Filter Scan")))->OnClick.Handle(this, &MemoryScannerScreen::OnNextScan);
 	buttonRow->Add(new Button(di->T("Clear")))->OnClick.Handle(this, &MemoryScannerScreen::OnClear);
 
 	countText_ = root_->Add(new TextView(se->T("Results: 0"), new LinearLayoutParams(Margins(10, 10))));
