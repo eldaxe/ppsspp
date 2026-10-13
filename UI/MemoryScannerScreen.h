@@ -49,6 +49,7 @@ private:
 	void SearchAddress(const std::string &text, bool cwcheat);
 
 	Path gamePath_;
+	int filterModeSelection_ = 0;
 
 	UI::TextView *countText_ = nullptr;
 	UI::PopupTextInputChoice *searchValueEdit_ = nullptr;
