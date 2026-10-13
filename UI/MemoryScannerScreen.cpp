@@ -86,9 +86,10 @@ void MemoryScannerScreen::CreateViews() {
 	scanValueRow->Add(new Button(se->T("Scan"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) {
 		MemoryScanner *active = g_MemoryScanner.GetActive();
 		if (active->HasScanDone())
-			OnNextScan(*(new EventParams()));
+			active->NextScan(active->valueType, active->searchValue, active->filterMode);
 		else
-			OnFirstScan(*(new EventParams()));
+			active->FirstScan(active->valueType, active->searchValue);
+		RebuildResultsList();
 	});
 
 	LinearLayout *addressRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
@@ -114,11 +115,10 @@ void MemoryScannerScreen::CreateViews() {
 
 	LinearLayout *filterRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL));
 	static const char *filterModes[] = { "Exact", "Changed", "Unchanged", "Increased", "Decreased" };
-	int filterModeSelection = (int)scanner->filterMode;
-	auto *filterChoice = filterRow->Add(new PopupMultiChoice(&filterModeSelection, se->T("Filter Mode"), filterModes, 0, 5, I18NCat::SEARCH, screenManager(), new LinearLayoutParams(1.0f)));
-	filterChoice->SetChoiceUntranslated(-1);
-	filterChoice->OnChoice.Add([scanner, &filterModeSelection](EventParams &) {
-		scanner->filterMode = (ScanFilterMode)filterModeSelection;
+	filterModeSelection_ = (int)scanner->filterMode;
+	auto *filterChoice = filterRow->Add(new PopupMultiChoice(&filterModeSelection_, se->T("Filter Mode"), filterModes, 0, 5, I18NCat::SEARCH, screenManager(), new LinearLayoutParams(1.0f)));
+	filterChoice->OnChoice.Add([this, scanner](EventParams &) {
+		scanner->filterMode = (ScanFilterMode)filterModeSelection_;
 	});
 
 	LinearLayout *buttonRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL));
