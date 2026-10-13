@@ -91,7 +91,13 @@ void MemoryScannerScreen::CreateViews() {
 
 	LinearLayout *cwcheatRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
 	cwcheatSearchEdit_ = cwcheatRow->Add(new PopupTextInputChoice(GetRequesterToken(), &cwcheatSearch_, se->T("Scan CWCheat"), se->T("CWCheat address, e.g. 0x00F4A618"), -1, screenManager(), new LinearLayoutParams(1.0f)));
-	cwcheatRow->Add(new Button(se->T("Scan"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) { SearchAddress(cwcheatSearch_, true); });
+ 	cwcheatRow->Add(new Button(se->T("Scan"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)))->OnClick.Add([this](EventParams &) { SearchAddress(cwcheatSearch_, true); });
+
+	root_->Add(new Button(se->T("Unknown Value")))->OnClick.Add([this](EventParams &) {
+		MemoryScanner *active = g_MemoryScanner.GetActive();
+		active->UnknownScan(active->valueType);
+		RebuildResultsList();
+	});
 
 	LinearLayout *typeRow = root_->Add(new LinearLayout(ORIENT_HORIZONTAL));
 	typeRow->Add(new TextView(se->T("Value Type"), new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
@@ -147,7 +153,7 @@ void MemoryScannerScreen::update() {
 	// Update live values in the list.
 	// Only update if the UI is in sync with the current scanner results.
 	const auto &results = scanner->GetResults();
-	if (valueChoices_.size() == std::min((size_t)100, results.size())) {
+	if (valueChoices_.size() == results.size()) {
 		for (size_t i = 0; i < valueChoices_.size(); ++i) {
 			uint32_t addr = resultAddresses_[i];
 			ScanValueType type = resultTypes_[i];
@@ -194,7 +200,7 @@ void MemoryScannerScreen::RebuildResultsList() {
 	lockHeader->SetShadow(true);
 	lockHeader->SetPadding(Margins(16, 0));
 
-	const size_t visibleResults = std::min((size_t)100, results.size());
+	const size_t visibleResults = results.size();
 	editValues_.reserve(visibleResults);
 	for (size_t i = 0; i < visibleResults; ++i) {
 		LinearLayout *row = resultsList_->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
