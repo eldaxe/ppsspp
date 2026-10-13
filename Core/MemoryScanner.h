@@ -50,6 +50,7 @@ struct ScanResult {
 class MemoryScanner {
 public:
 	void FirstScan(ScanValueType type, const std::string &filter);
+	void UnknownScan(ScanValueType type);
 	void NextScan(ScanValueType type, const std::string &filter, ScanFilterMode mode);
 	void Clear();
 	void Update();
