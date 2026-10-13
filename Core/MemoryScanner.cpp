@@ -144,9 +144,27 @@ void MemoryScanner::FirstScan(ScanValueType type, const std::string &filter) {
 			ScanResult result(addr, type);
 			result.previousValue = ReadScanBits(addr, type);
 			newResults.push_back(result);
-			if (newResults.size() >= 1000)
-				break;
 		}
+	}
+	results_ = std::move(newResults);
+	valueType = type;
+	firstScanDone_ = true;
+}
+
+
+void MemoryScanner::UnknownScan(ScanValueType type) {
+	const uint32_t startAddr = 0x08000000;
+	const uint32_t endAddr = startAddr + Memory::g_MemorySize;
+	std::vector<ScanResult> newResults;
+	const uint32_t size = type == ScanValueType::U8 ? 1 : type == ScanValueType::U16 ? 2 : 4;
+	const uint64_t possible = Memory::g_MemorySize >= size ? (uint64_t)Memory::g_MemorySize - size + 1 : 0;
+	if (possible <= newResults.max_size())
+		newResults.reserve((size_t)possible);
+
+	for (uint32_t addr = startAddr; IsValidScanRange(addr, type, startAddr, endAddr); ++addr) {
+		ScanResult result(addr, type);
+		result.previousValue = ReadScanBits(addr, type);
+		newResults.push_back(result);
 	}
 	results_ = std::move(newResults);
 	valueType = type;
