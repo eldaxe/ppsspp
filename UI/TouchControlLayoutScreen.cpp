@@ -42,6 +42,14 @@ static u32 GetButtonColor() {
 	return g_Config.iTouchButtonStyle != 0 ? 0xFFFFFF : 0xc0b080;
 }
 
+// Match gameplay's Button fill opacity for the background only.
+static u32 GetEditorButtonFillColor(float opacity) {
+	const float fillOpacity = g_Config.iTouchButtonStyle == 0
+		? opacity * (g_Config.iTouchButtonSurfaceAlpha / 100.0f)
+		: opacity;
+	return colorAlpha(GetButtonColor(), fillOpacity);
+}
+
 class DragDropButton : public MultiTouchButton {
 public:
 	DragDropButton(ConfigTouchPos &pos, const char *key, ImageID bgImg, ImageID img, const Bounds &screenBounds)
@@ -95,7 +103,7 @@ public:
 	PSPActionButtons(ConfigTouchPos &pos, const char *key, float &spacing, const Bounds &screenBounds)
 		: DragDropButton(pos, key, ImageID::invalid(), ImageID::invalid(), screenBounds), spacing_(spacing) {
 		using namespace UI;
-		roundId_ = g_Config.iTouchButtonStyle ? ImageID("I_ROUND_LINE") : ImageID("I_ROUND");
+		roundId_ = g_Config.iTouchButtonStyle == 1 ? ImageID("I_ROUND_LINE") : ImageID("I_ROUND");
 	};
 
 	void setCircleVisibility(bool visible) {
@@ -117,7 +125,7 @@ public:
 	void Draw(UIContext &dc) override {
 		scale_ = theScale_*layoutAreaScale;
 		float opacity = GamepadGetOpacity();
-		uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
+		uint32_t colorBg = GetEditorButtonFillColor(opacity);
 		uint32_t color = colorAlpha(0xFFFFFF, opacity);
 
 		int centerX = bounds_.centerX();
@@ -246,13 +254,13 @@ public:
 	void Draw(UIContext &dc) override {
 		scale_ = theScale_*layoutAreaScale;
 		float opacity = GamepadGetOpacity();
-		uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
+		uint32_t colorBg = GetEditorButtonFillColor(opacity);
 		uint32_t color = colorAlpha(0xFFFFFF, opacity);
 
 		static const float xoff[4] = {1, 0, -1, 0};
 		static const float yoff[4] = {0, 1, 0, -1};
 
-		ImageID dirImage = g_Config.iTouchButtonStyle ? ImageID("I_DIR_LINE") : ImageID("I_DIR");
+		ImageID dirImage = g_Config.iTouchButtonStyle == 1 ? ImageID("I_DIR_LINE") : ImageID("I_DIR");
 
 		for (int i = 0; i < 4; i++) {
 			float r = D_pad_Radius * spacing_ * layoutAreaScale;
@@ -291,10 +299,10 @@ public:
 		scale_ = theScale_ * layoutAreaScale;
 
 		float opacity = GamepadGetOpacity();
-		uint32_t colorBg = colorAlpha(GetButtonColor(), opacity);
+		uint32_t colorBg = GetEditorButtonFillColor(opacity);
 
-		const ImageID stickImage = g_Config.iTouchButtonStyle ? ImageID("I_STICK_LINE") : ImageID("I_STICK");
-		const ImageID stickBg = g_Config.iTouchButtonStyle ? ImageID("I_STICK_BG_LINE") : ImageID("I_STICK_BG");
+		const ImageID stickImage = g_Config.iTouchButtonStyle == 1 ? ImageID("I_STICK_LINE") : ImageID("I_STICK");
+		const ImageID stickBg = g_Config.iTouchButtonStyle == 1 ? ImageID("I_STICK_BG_LINE") : ImageID("I_STICK_BG");
 
 		dc.Draw()->DrawImage(stickBg, bounds_.centerX(), bounds_.centerY(), scale_, colorBg, ALIGN_CENTER);
 		dc.Draw()->DrawImage(stickImage, bounds_.centerX(), bounds_.centerY(), scale_ * spacing_, colorBg, ALIGN_CENTER);
@@ -458,12 +466,15 @@ bool ControlLayoutView::Touch(const TouchInput &touch) {
 }
 
 void ControlLayoutView::Draw(UIContext& dc) {
-	float opacity = g_Config.iTouchButtonOpacity / 100.0f;
-	GamepadUpdateOpacity(std::max(0.5f, opacity));
+	// Use the configured button fill opacity in the editor, just like normal gameplay.
+	const float savedOpacity = GamepadGetOpacity();
+	const float opacity = g_Config.iTouchButtonOpacity / 100.0f;
+	GamepadUpdateOpacity(opacity);
 	using namespace UI;
 	dc.FillRect(Drawable(0x80000000), bounds_);
 	dc.Flush();
 	UI::AnchorLayout::Draw(dc);
+	GamepadUpdateOpacity(savedOpacity);
 }
 
 void ControlLayoutView::CreateViews() {
@@ -487,11 +498,11 @@ void ControlLayoutView::CreateViews() {
 		controls_.push_back(actionButtons);
 	}
 
-	ImageID rectImage = g_Config.iTouchButtonStyle ? ImageID("I_RECT_LINE") : ImageID("I_RECT");
-	ImageID roundImage = g_Config.iTouchButtonStyle ? ImageID("I_ROUND_LINE") : ImageID("I_ROUND");
-	ImageID shoulderImage = g_Config.iTouchButtonStyle ? ImageID("I_SHOULDER_LINE") : ImageID("I_SHOULDER");
-	ImageID stickImage = g_Config.iTouchButtonStyle ? ImageID("I_STICK_LINE") : ImageID("I_STICK");
-	ImageID stickBg = g_Config.iTouchButtonStyle ? ImageID("I_STICK_BG_LINE") : ImageID("I_STICK_BG");
+	ImageID rectImage = g_Config.iTouchButtonStyle == 1 ? ImageID("I_RECT_LINE") : ImageID("I_RECT");
+	ImageID roundImage = g_Config.iTouchButtonStyle == 1 ? ImageID("I_ROUND_LINE") : ImageID("I_ROUND");
+	ImageID shoulderImage = g_Config.iTouchButtonStyle == 1 ? ImageID("I_SHOULDER_LINE") : ImageID("I_SHOULDER");
+	ImageID stickImage = g_Config.iTouchButtonStyle == 1 ? ImageID("I_STICK_LINE") : ImageID("I_STICK");
+	ImageID stickBg = g_Config.iTouchButtonStyle == 1 ? ImageID("I_STICK_BG_LINE") : ImageID("I_STICK_BG");
 
 	auto addDragDropButton = [&](ConfigTouchPos &pos, const char *key, ImageID bgImg, ImageID img) {
 		DragDropButton *b = nullptr;
@@ -527,7 +538,8 @@ void ControlLayoutView::CreateViews() {
 	auto addDragCustomKey = [&](ConfigTouchPos &pos, const char *key, const ConfigCustomButton& cfg) {
 		DragDropButton *b = nullptr;
 		if (pos.show) {
-			b = new DragDropButton(pos, key, g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyImages[cfg.image].i, bounds);
+			// Only Border uses outline shapes; Classic uses filled shapes.
+			b = new DragDropButton(pos, key, g_Config.iTouchButtonStyle == 1 ? customKeyShapes[cfg.shape].l : customKeyShapes[cfg.shape].i, customKeyImages[cfg.image].i, bounds);
 			b->FlipImageH(customKeyShapes[cfg.shape].f);
 			b->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);
 			controls_.push_back(b);
