@@ -476,7 +476,7 @@ void ControlLayoutView::CreateViews() {
 	}
 
 	// Create all the subviews.
-	TouchControlConfig &touch = g_Config.GetTouchControlsConfig(deviceOrientation_);
+	TouchControlConfig &touch = g_Config.GetCurrentTouchControlsConfig(deviceOrientation_);
 
 	if (touch.bShowTouchCircle || touch.bShowTouchCross || touch.bShowTouchTriangle || touch.bShowTouchSquare) {
 		PSPActionButtons *actionButtons = new PSPActionButtons(touch.touchActionButtonCenter, "Action buttons", touch.fActionButtonSpacing, bounds);
@@ -590,11 +590,22 @@ void TouchControlLayoutScreen::OnReset(UI::EventParams &e) {
 
 	const Bounds &bounds = GetLayoutBounds(*screenManager()->getUIContext());
 	const DeviceOrientation orientation = GetDeviceOrientation();
-	TouchControlConfig &touch = g_Config.GetTouchControlsConfig(orientation);
+	TouchControlConfig &touch = g_Config.GetCurrentTouchControlsConfig(orientation);
 	touch.ResetLayout();
 	InitPadLayout(&touch, orientation, bounds.w, bounds.h);
 	RecreateViews();
 };
+
+void TouchControlLayoutScreen::OnLayoutSelection(UI::EventParams &e) {
+	const DeviceOrientation orientation = GetDeviceOrientation();
+	const int selection = e.a + 1;
+	g_Config.iTouchLayoutSelection = selection;
+	g_Config.iTouchLayoutSelectionSaved = selection;
+
+	const Bounds &bounds = GetLayoutBounds(*screenManager()->getUIContext());
+	InitPadLayout(&g_Config.GetCurrentTouchControlsConfig(orientation), orientation, bounds.w, bounds.h);
+	RecreateViews();
+}
 
 void TouchControlLayoutScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 	UIBaseDialogScreen::dialogFinished(dialog, result);
@@ -621,7 +632,7 @@ void TouchControlLayoutScreen::CreateViews() {
 	// setup g_Config for button layout
 	const Bounds &bounds = GetLayoutBounds(*screenManager()->getUIContext());
 	const DeviceOrientation orientation = GetDeviceOrientation();
-	InitPadLayout(&g_Config.GetTouchControlsConfig(orientation), orientation, bounds.w, bounds.h);
+	InitPadLayout(&g_Config.GetCurrentTouchControlsConfig(orientation), orientation, bounds.w, bounds.h);
 
 	// const bool portrait = GetDeviceOrientation() == DeviceOrientation::Portrait;
 
@@ -650,6 +661,12 @@ void TouchControlLayoutScreen::CreateViews() {
 		}
 	});
 
+	ChoiceStrip *layoutSelectionStrip = new ChoiceStrip(ORIENT_VERTICAL);
+	layoutSelectionStrip->AddChoice("Layout 1");
+	layoutSelectionStrip->AddChoice("Layout 2");
+	layoutSelectionStrip->SetSelection(g_Config.iTouchLayoutSelection - 1, false);
+	layoutSelectionStrip->OnChoice.Handle(this, &TouchControlLayoutScreen::OnLayoutSelection);
+
 	CheckBox *snap = new CheckBox(&g_Config.bTouchSnapToGrid, di->T("Snap"));
 	PopupSliderChoice *gridSize = new PopupSliderChoice(&g_Config.iTouchSnapGridSize, 2, 256, 64, di->T("Grid"), screenManager(), "");
 	gridSize->SetEnabledPtr(&g_Config.bTouchSnapToGrid);
@@ -658,6 +675,9 @@ void TouchControlLayoutScreen::CreateViews() {
 	leftColumn->Add(new Choice(co->T("Customize")))->OnClick.Add([this](UI::EventParams &e) {
 		screenManager()->push(new TouchControlVisibilityScreen(gamePath_));
 	});
+	leftColumn->Add(new Spacer(8.0f));
+	leftColumn->Add(new TextView(di->T("Layout:")))->SetTextSize(TextSize::Small);
+	leftColumn->Add(layoutSelectionStrip);
 	leftColumn->Add(snap);
 	leftColumn->Add(gridSize);
 	leftColumn->Add(new Choice(di->T("Reset")))->OnClick.Handle(this, &TouchControlLayoutScreen::OnReset);

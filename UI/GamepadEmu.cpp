@@ -172,6 +172,10 @@ bool MultiTouchButton::Touch(const TouchInput &input) {
 	if (input.flags & TouchInputFlags::RELEASE_ALL) {
 		pointerDownMask_ = 0;
 		usedPointerMask = 0;
+		// RELEASE_ALL represents every active pointer, not just input.id.
+		for (int i = 0; i < TOUCH_MAX_POINTERS; ++i) {
+			primaryButton[i] = nullptr;
+		}
 	}
 	return retval;
 }
@@ -276,6 +280,21 @@ bool CustomButton::Touch(const TouchInput &input) {
 	bool retval = MultiTouchButton::Touch(input);
 	bool down = pointerDownMask_ != 0;
 
+	if (input.flags & TouchInputFlags::RELEASE_ALL) {
+		// Layout swaps must release custom mappings too, including toggle and
+		// repeat buttons whose key-up is not handled by the normal pointer-up path.
+		if (on_ || lastDown || pressedFrames_ > 0) {
+			for (int i = 0; i < ARRAY_SIZE(g_customKeyList); i++) {
+				if (pspButtonBit_ & (1ULL << i)) {
+					controlMapper_->PSPKey(DEVICE_ID_TOUCH, g_customKeyList[i].c, KeyInputFlags::UP);
+				}
+			}
+		}
+		on_ = false;
+		pressedFrames_ = 0;
+		return retval;
+	}
+
 	if (down && !lastDown) {
 		if (g_Config.bHapticFeedback)
 			System_Vibrate(HAPTIC_VIRTUAL_KEY);
@@ -358,6 +377,15 @@ bool PSPDpad::Touch(const TouchInput &input) {
 	}
 
 	bool retval = GamepadComponent::Touch(input);
+
+	if (input.flags & TouchInputFlags::RELEASE_ALL) {
+		// A layout swap destroys this view without individual pointer-up events.
+		// Release any directions held by the old D-pad before it is recreated.
+		dragPointerId_ = -1;
+		usedPointerMask = 0;
+		ProcessTouch(bounds_.centerX(), bounds_.centerY(), false, false);
+		return retval;
+	}
 
 	if (input.flags & TouchInputFlags::DOWN) {
 		if (dragPointerId_ == -1 && bounds_.Contains(input.x, input.y)) {
@@ -539,7 +567,7 @@ void PSPStick::Draw(UIContext &dc) {
 	__CtrlPeekAnalog(stick_, &dx, &dy);
 	rotateTouchHelper(dx, dy);
 
-	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+	const TouchControlConfig &config = g_Config.GetCurrentTouchControlsConfig(g_display.GetDeviceOrientation());
 
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
@@ -566,7 +594,7 @@ bool PSPStick::Touch(const TouchInput &input) {
 		return retval;
 	}
 	if (input.flags & TouchInputFlags::DOWN) {
-		const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+		const TouchControlConfig &config = g_Config.GetCurrentTouchControlsConfig(g_display.GetDeviceOrientation());
 		float fac = 0.5f * (stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale)-0.5f;
 		if (dragPointerId_ == -1 && bounds_.Expand(bounds_.w*fac, bounds_.h*fac).Contains(input.x, input.y)) {
 			if (g_Config.bAutoCenterTouchAnalog) {
@@ -657,7 +685,7 @@ void PSPCustomStick::Draw(UIContext &dc) {
 	dx = posX_;
 	dy = -posY_;
 
-	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+	const TouchControlConfig &config = g_Config.GetCurrentTouchControlsConfig(g_display.GetDeviceOrientation());
 	const float headScale = config.fRightStickHeadScale;
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
@@ -683,7 +711,7 @@ bool PSPCustomStick::Touch(const TouchInput &input) {
 		return false;
 	}
 	if (input.flags & TouchInputFlags::DOWN) {
-		const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+		const TouchControlConfig &config = g_Config.GetCurrentTouchControlsConfig(g_display.GetDeviceOrientation());
 		float fac = 0.5f * config.fRightStickHeadScale - 0.5f;
 		if (dragPointerId_ == -1 && bounds_.Expand(bounds_.w*fac, bounds_.h*fac).Contains(input.x, input.y)) {
 			if (g_Config.bAutoCenterTouchAnalog) {

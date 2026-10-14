@@ -768,6 +768,22 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 			}
 		}
 		break;
+	case VIRTKEY_SWAP_LAYOUT:
+		if (down) {
+			// Switch the active layout first, then release all inputs from the
+			// current view tree before it is recreated. RELEASE_ALL is not tied
+			// to the touch position, so a pointer still over a button won't keep
+			// the previous control latched during the layout transition.
+			g_Config.SwapTouchControlsLayouts();
+
+			TouchInput releaseTouch{};
+			releaseTouch.id = 0;
+			releaseTouch.flags = TouchInputFlags::RELEASE_ALL;
+			UIScreen::touch(releaseTouch);
+
+			System_PostUIMessage(UIMessage::RECREATE_VIEWS);
+		}
+		break;
 	case VIRTKEY_OPENCHAT:
 		if (down) {
 			if (g_Config.bEnableNetworkChat && !g_Config.bShowImDebugger) {
@@ -1213,7 +1229,7 @@ void EmuScreen::CreateViews() {
 
 	const DeviceOrientation deviceOrientation = GetDeviceOrientation();
 
-	TouchControlConfig &touch = g_Config.GetTouchControlsConfig(deviceOrientation);
+	TouchControlConfig &touch = g_Config.GetCurrentTouchControlsConfig(deviceOrientation);
 
 	const Bounds &bounds = GetLayoutBounds(*screenManager()->getUIContext());
 
