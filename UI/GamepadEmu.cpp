@@ -276,6 +276,22 @@ void CustomButton::GetContentDimensions(const UIContext &dc, float &w, float &h)
 
 bool CustomButton::Touch(const TouchInput &input) {
 	using namespace CustomKeyData;
+
+	// Swap Layout is a one-shot action. Don't let a swipe re-activate it when
+	// the same pointer moves back into the button after RELEASE_ALL cleared
+	// the pressed state. It can still be activated by a fresh DOWN event.
+	bool isSwapLayoutButton = false;
+	for (int i = 0; i < ARRAY_SIZE(g_customKeyList); i++) {
+		if ((pspButtonBit_ & (1ULL << i)) && g_customKeyList[i].c == VIRTKEY_SWAP_LAYOUT) {
+			isSwapLayoutButton = true;
+			break;
+		}
+	}
+	if (isSwapLayoutButton && (input.flags & TouchInputFlags::MOVE) &&
+		!(input.flags & (TouchInputFlags::UP | TouchInputFlags::RELEASE_ALL))) {
+		return false;
+	}
+
 	bool lastDown = pointerDownMask_ != 0;
 	bool retval = MultiTouchButton::Touch(input);
 	bool down = pointerDownMask_ != 0;
