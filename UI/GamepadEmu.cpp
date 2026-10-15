@@ -228,6 +228,9 @@ bool MultiTouchButton::Touch(const TouchInput &input) {
 	if (input.flags & TouchInputFlags::RELEASE_ALL) {
 		pointerDownMask_ = 0;
 		usedPointerMask = 0;
+		for (int i = 0; i < TOUCH_MAX_POINTERS; ++i) {
+			primaryButton[i] = nullptr;
+		}
 	}
 	return retval;
 }
@@ -349,6 +352,18 @@ bool CustomButton::Touch(const TouchInput &input) {
 	bool retval = MultiTouchButton::Touch(input);
 	bool down = pointerDownMask_ != 0;
 
+	if (input.flags & TouchInputFlags::RELEASE_ALL) {
+		if (on_ || lastDown || pressedFrames_ > 0) {
+			for (int i = 0; i < ARRAY_SIZE(g_customKeyList); i++) {
+				if (pspButtonBit_ & (1ULL << i))
+					controlMapper_->PSPKey(DEVICE_ID_TOUCH, g_customKeyList[i].c, KeyInputFlags::UP);
+			}
+		}
+		on_ = false;
+		pressedFrames_ = 0;
+		return retval;
+	}
+
 	if (down && !lastDown) {
 		if (g_Config.bHapticFeedback)
 			System_Vibrate(HAPTIC_VIRTUAL_KEY);
@@ -461,6 +476,13 @@ bool PSPDpad::Touch(const TouchInput &input) {
 	}
 
 	bool retval = GamepadComponent::Touch(input);
+
+	if (input.flags & TouchInputFlags::RELEASE_ALL) {
+		dragPointerId_ = -1;
+		usedPointerMask = 0;
+		ProcessTouch(bounds_.centerX(), bounds_.centerY(), false, false);
+		return retval;
+	}
 
 	if (input.flags & TouchInputFlags::DOWN) {
 		if (dragPointerId_ == -1 && bounds_.Contains(input.x, input.y)) {
@@ -650,7 +672,7 @@ void PSPStick::Draw(UIContext &dc) {
 		dy = std::clamp(dy, -1.0f, 1.0f);
 	}
 
-	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
+	const TouchControlConfig &config = g_Config.GetCurrentTouchControlsConfig(g_display.GetDeviceOrientation());
 
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
