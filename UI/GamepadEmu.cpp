@@ -108,11 +108,9 @@ static u32 GetPressedColor(const UIContext &dc) {
 
 static uint32_t GetButtonBackgroundColor(const UIContext &dc, float opacity) {
 	const u32 themeColor = GetButtonColor(dc);
-	if (g_Config.iTouchButtonStyle == 0) {
-		// Surface alpha controls only the button background, not the icon or overall button opacity.
-		return colorAlpha(themeColor, opacity * (g_Config.iTouchButtonSurfaceAlpha / 100.0f));
-	}
-	return colorAlpha(themeColor, opacity);
+	// Surface alpha controls the button surface for both Classic fills and Border outlines.
+	// Keep it independent from the overall opacity used for the button icon.
+	return colorAlpha(themeColor, opacity * (g_Config.iTouchButtonSurfaceAlpha / 100.0f));
 }
 
 
