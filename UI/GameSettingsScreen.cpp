@@ -841,13 +841,42 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		});
 		gesture->SetEnabledPtr(&g_Config.bShowTouchControls);
 
-		static const char *touchControlStyles[] = { "Classic", "Thin borders", "Glowing borders" };
+		static const char *touchControlStyles[] = { "Classic", "Border" };
 		View *style = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonStyle, co->T("Button style"), touchControlStyles, 0, ARRAY_SIZE(touchControlStyles), I18NCat::CONTROLS, screenManager()));
 		style->SetEnabledPtr(&g_Config.bShowTouchControls);
+
+		static const char *touchAtlasScales[] = { "1x (Default)", "2x", "4x", "8x" };
+		PopupMultiChoice *atlasScale = new PopupMultiChoice(&g_Config.iTouchButtonAtlasScale, co->T("Touch button SVG quality"), touchAtlasScales, 0, ARRAY_SIZE(touchAtlasScales), I18NCat::CONTROLS, screenManager());
+		controlsSettings->Add(atlasScale);
+		atlasScale->SetEnabledPtr(&g_Config.bShowTouchControls);
+		atlasScale->OnChoice.Add([this](UI::EventParams &e) {
+			screenManager()->getUIContext()->InvalidateAtlas();
+		});
+
+		static const char *touchButtonPressedStyles[] = { "Glow", "Enlarge", "Shrink", "Ripple" };
+		View *pressedStyle = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonPressedStyle, co->T("Button pressed style"), touchButtonPressedStyles, 0, ARRAY_SIZE(touchButtonPressedStyles), I18NCat::CONTROLS, screenManager()));
+		pressedStyle->SetEnabledPtr(&g_Config.bShowTouchControls);
+
+		CheckBox *disableTouchShadows = controlsSettings->Add(new CheckBox(&g_Config.bDisableTouchButtonShadows, co->T("Disable shadow buttons")));
+		disableTouchShadows->SetEnabledPtr(&g_Config.bShowTouchControls);
+		disableTouchShadows->OnClick.Add([this](UI::EventParams &e) {
+			screenManager()->getUIContext()->InvalidateAtlas();
+		});
 
 		PopupSliderChoice *opacity = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonOpacity, 0, 100, 65, co->T("Button Opacity"), screenManager(), "%"));
 		opacity->SetEnabledPtr(&g_Config.bShowTouchControls);
 		opacity->SetFormat("%i%%");
+
+		PopupSliderChoice *surfaceAlpha = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonSurfaceAlpha, 0, 100, 25, co->T("Button fill opacity"), screenManager(), "%"));
+		surfaceAlpha->SetEnabledPtr(&g_Config.bShowTouchControls);
+		surfaceAlpha->SetFormat("%i%%");
+
+		PopupSliderChoice *enlargeScale = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonEnlargePercent, 100, 500, 150, co->T("Enlarge size"), screenManager(), "%"));
+		enlargeScale->SetFormat("%i%%");
+		enlargeScale->SetEnabledFunc([] { return g_Config.bShowTouchControls && g_Config.iTouchButtonPressedStyle == 1; });
+		PopupSliderChoice *shrinkScale = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonShrinkPercent, 1, 100, 67, co->T("Shrink size"), screenManager(), "%"));
+		shrinkScale->SetFormat("%i%%");
+		shrinkScale->SetEnabledFunc([] { return g_Config.bShowTouchControls && g_Config.iTouchButtonPressedStyle == 2; });
 		PopupSliderChoice *autoHide = controlsSettings->Add(new PopupSliderChoice(&g_Config.iTouchButtonHideSeconds, 0, 300, 20, co->T("Auto-hide buttons after delay"), screenManager(), di->T("seconds, 0:off")));
 		autoHide->SetEnabledPtr(&g_Config.bShowTouchControls);
 		autoHide->SetFormat(di->T("%d seconds"));
@@ -856,11 +885,16 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		CheckBox *touchGliding = controlsSettings->Add(new CheckBox(&g_Config.bTouchGliding, co->T("Keep first touched button pressed when dragging")));
 		touchGliding->SetEnabledPtr(&g_Config.bShowTouchControls);
 
-		TouchControlConfig &touch = g_Config.GetTouchControlsConfig(GetDeviceOrientation());
+		TouchControlConfig &touch = g_Config.GetCurrentTouchControlsConfig(GetDeviceOrientation());
 
 		// Hide stick background, useful when increasing the size
 		CheckBox *hideStickBackground = controlsSettings->Add(new CheckBox(&touch.bHideStickBackground, co->T("Hide touch analog stick background circle")));
 		hideStickBackground->SetEnabledPtr(&g_Config.bShowTouchControls);
+
+		// Optional circular input range for on-screen touch analog sticks.
+		CheckBox *analogCircleRange = controlsSettings->Add(new CheckBox(&g_Config.bTouchAnalogCircleRange, co->T("Analog Circle Range")));
+		analogCircleRange->SetEnabledPtr(&g_Config.bShowTouchControls);
+		controlsSettings->Add(new SettingHint(co->T("Restrict touch analog input to a circular range instead of the original square range."), analogCircleRange));
 
 		// Sticky D-pad.
 		CheckBox *stickyDpad = controlsSettings->Add(new CheckBox(&g_Config.bStickyTouchDPad, co->T("Sticky D-Pad")));
