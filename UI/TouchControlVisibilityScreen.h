@@ -41,6 +41,10 @@ public:
 	void CreateContextMenu(UI::ViewGroup *parent) override;
 	void onFinish(DialogResult result) override;
 
+protected:
+	void dialogFinished(const Screen *dialog, DialogResult result) override;
+
+public:
 	const char *tag() const override { return "TouchControlVisibility"; }
 
 	std::string_view GetTitle() const override;
