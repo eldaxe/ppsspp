@@ -16,6 +16,8 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <algorithm>
+#include <functional>
+#include <utility>
 #include <vector>
 
 #include "Common/Data/Color/RGBAUtil.h"
@@ -44,9 +46,10 @@ static u32 GetButtonColor() {
 
 class DragDropButton : public MultiTouchButton {
 public:
-	DragDropButton(ConfigTouchPos &pos, const char *key, ImageID bgImg, ImageID img, const Bounds &screenBounds)
+	DragDropButton(ConfigTouchPos &pos, const char *key, ImageID bgImg, ImageID img, const Bounds &screenBounds,
+		bool summaryShow = false, std::string summaryText = {}, int summaryPosition = 0, int summaryMargin = 0)
 	: MultiTouchButton(key, bgImg, bgImg, img, pos.scale, new UI::AnchorLayoutParams(pos.x * screenBounds.w, pos.y * screenBounds.h, UI::NONE, UI::NONE, UI::Centering::Both)),
-		x_(pos.x), y_(pos.y), theScale_(pos.scale), screenBounds_(screenBounds) {
+		x_(pos.x), y_(pos.y), theScale_(pos.scale), screenBounds_(screenBounds), summaryShow_(summaryShow), summaryText_(std::move(summaryText)), summaryPosition_(summaryPosition), summaryMargin_(summaryMargin) {
 		scale_ = theScale_;
 	}
 
@@ -60,6 +63,33 @@ public:
 	void Draw(UIContext &dc) override {
 		scale_ = theScale_*layoutAreaScale; // Scale down just for rendering
 		MultiTouchButton::Draw(dc);
+
+		if (summaryShow_ && !summaryText_.empty()) {
+			static constexpr float marginSizes[] = { 0.0f, 6.0f, 12.0f, 20.0f };
+			const int position = std::clamp(summaryPosition_, 0, 4);
+			const int margin = std::clamp(summaryMargin_, 0, 3);
+			const float offset = marginSizes[margin] * scale_;
+			const uint32_t textColor = colorAlpha(0xFFFFFF, std::max(GamepadGetOpacity(), 0.6f));
+
+			switch (position) {
+			case 0:
+				dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.centerY(), textColor, ALIGN_HCENTER | ALIGN_VCENTER | FLAG_WRAP_TEXT);
+				break;
+			case 1:
+				dc.DrawTextShadow(summaryText_, bounds_.x - offset, bounds_.centerY(), textColor, ALIGN_RIGHT | ALIGN_VCENTER | FLAG_WRAP_TEXT);
+				break;
+			case 2:
+				dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.y2() + offset, textColor, ALIGN_HCENTER | ALIGN_TOP | FLAG_WRAP_TEXT);
+				break;
+			case 3:
+				dc.DrawTextShadow(summaryText_, bounds_.x2() + offset, bounds_.centerY(), textColor, ALIGN_LEFT | ALIGN_VCENTER | FLAG_WRAP_TEXT);
+				break;
+			case 4:
+				dc.DrawTextShadow(summaryText_, bounds_.centerX(), bounds_.y - offset, textColor, ALIGN_HCENTER | ALIGN_BOTTOM | FLAG_WRAP_TEXT);
+				break;
+			}
+		}
+
 		scale_ = theScale_/layoutAreaScale; // is this is needed?
 	}
 
@@ -70,10 +100,12 @@ public:
 	}
 
 	virtual float GetScale() const { return theScale_; }
+	virtual float *GetScalePtr() { return &theScale_; }
 	virtual void SetScale(float s) { theScale_ = s; scale_ = s; }
 
 	virtual float GetSpacing() const { return 1.0f; }
 	virtual void SetSpacing(float s) { }
+
 
 	virtual bool Contains(float x, float y) {
 		const float thresholdFactor = 0.25f;
@@ -88,6 +120,41 @@ protected:
 	const Bounds &screenBounds_;
 	float &theScale_;
 	float &x_, &y_;
+	bool summaryShow_;
+	std::string summaryText_;
+	int summaryPosition_;
+	int summaryMargin_;
+};
+
+class TouchControlSizeSliderScreen : public UI::PopupScreen {
+public:
+	TouchControlSizeSliderScreen(float *scale, float size)
+		: PopupScreen("Set size", "OK", "Cancel"), scale_(scale), size_(size) {
+	}
+
+	void CreatePopupContents(UI::ViewGroup *parent) override {
+		using namespace UI;
+		SliderFloat *slider = parent->Add(new SliderFloat(&size_, 0.5f, 5.0f,
+			new LinearLayoutParams(Margins(12.0f, 16.0f))));
+		slider->OnChange.Add([this](EventParams &) {
+			size_ = std::clamp(size_, 0.5f, 5.0f);
+		});
+	}
+
+	const char *tag() const override { return "TouchControlSizeSlider"; }
+
+protected:
+	void OnCompleted(DialogResult result) override {
+		if (result != DR_OK || !scale_) {
+			return;
+		}
+		*scale_ = std::clamp(size_, 0.5f, 5.0f);
+		g_Config.Save("TouchControlLayoutScreen::setControlSize");
+	}
+
+private:
+	float *scale_;
+	float size_;
 };
 
 class PSPActionButtons : public DragDropButton {
@@ -350,8 +417,8 @@ class DragDropButton;
 
 class ControlLayoutView : public UI::AnchorLayout {
 public:
-	ControlLayoutView(DeviceOrientation orientation, UI::LayoutParams *layoutParams)
-		: UI::AnchorLayout(layoutParams), deviceOrientation_(orientation) {
+	ControlLayoutView(DeviceOrientation orientation, bool *setSizeMode, ScreenManager *screenManager, UI::LayoutParams *layoutParams)
+		: UI::AnchorLayout(layoutParams), deviceOrientation_(orientation), setSizeMode_(setSizeMode), screenManager_(screenManager) {
 		SetClip(true);
 	}
 
@@ -379,6 +446,8 @@ private:
 	float startSpacing_ = -1.0f;
 
 	DeviceOrientation deviceOrientation_;
+	bool *setSizeMode_;
+	ScreenManager *screenManager_;
 };
 
 static Point2D ClampTo(const Point2D &p, const Bounds &b) {
@@ -439,6 +508,11 @@ bool ControlLayoutView::Touch(const TouchInput &touch) {
 	}
 	if ((touch.flags & TouchInputFlags::DOWN) && pickedControl_ == 0) {
 		pickedControl_ = getPickedControl(touch.x, touch.y);
+		if (pickedControl_ && mode_ == 1 && setSizeMode_ && *setSizeMode_) {
+			screenManager_->push(new TouchControlSizeSliderScreen(pickedControl_->GetScalePtr(), pickedControl_->GetScale()));
+			pickedControl_ = nullptr;
+			return true;
+		}
 		if (pickedControl_) {
 			startDragX_ = touch.x;
 			startDragY_ = touch.y;
@@ -524,10 +598,11 @@ void ControlLayoutView::CreateViews() {
 		controls_.push_back(new PSPStickDragDrop(touch.touchRightAnalogStick, "Right analog stick", stickBg, stickImage, bounds, touch.fRightStickHeadScale));
 	}
 
-	auto addDragCustomKey = [&](ConfigTouchPos &pos, const char *key, const ConfigCustomButton& cfg) {
+	auto addDragCustomKey = [&](ConfigTouchPos &pos, const char *key, const ConfigCustomButton& cfg, bool summaryShow, const std::string &summaryText, int summaryPosition, int summaryMargin) {
 		DragDropButton *b = nullptr;
 		if (pos.show) {
-			b = new DragDropButton(pos, key, g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyImages[cfg.image].i, bounds);
+			b = new DragDropButton(pos, key, g_Config.iTouchButtonStyle == 0 ? customKeyShapes[cfg.shape].i : customKeyShapes[cfg.shape].l, customKeyImages[cfg.image].i, bounds,
+				summaryShow, summaryText, summaryPosition, summaryMargin);
 			b->FlipImageH(customKeyShapes[cfg.shape].f);
 			b->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);
 			controls_.push_back(b);
@@ -541,7 +616,7 @@ void ControlLayoutView::CreateViews() {
 
 		char temp[64];
 		snprintf(temp, sizeof(temp), "Custom %d button", i);
-		addDragCustomKey(touch.touchCustom[i], temp, g_Config.CustomButton[i]);
+		addDragCustomKey(touch.touchCustom[i], temp, g_Config.CustomButton[i], g_Config.bCustomButtonSummary[i], g_Config.sCustomButtonSummaryText[i], g_Config.iCustomButtonSummaryPosition[i], g_Config.iCustomButtonSummaryMargin[i]);
 	}
 
 	for (size_t i = 0; i < controls_.size(); i++) {
@@ -653,11 +728,11 @@ void TouchControlLayoutScreen::CreateViews() {
 	mode_ = new ChoiceStrip(ORIENT_VERTICAL);
 	mode_->AddChoice(di->T("Move"), ImageID("I_MOVE"));
 	mode_->AddChoice(di->T("Resize"), ImageID("I_RESIZE"));
-	mode_->SetSelection(0, false);
+	mode_->SetSelection(selectedMode_, false);
 	mode_->OnChoice.Add([this](UI::EventParams &e) {
-		int mode = mode_->GetSelection();
+		selectedMode_ = mode_->GetSelection();
 		if (layoutView_) {
-			layoutView_->mode_ = mode;
+			layoutView_->mode_ = selectedMode_;
 		}
 	});
 
@@ -672,6 +747,9 @@ void TouchControlLayoutScreen::CreateViews() {
 	gridSize->SetEnabledPtr(&g_Config.bTouchSnapToGrid);
 
 	leftColumn->Add(mode_);
+	leftColumn->Add(new CheckBox(&setSizeMode_, di->T("Set size")))->SetEnabledFunc([this]() {
+		return mode_ && mode_->GetSelection() == 1;
+	});
 	leftColumn->Add(new Choice(co->T("Customize")))->OnClick.Add([this](UI::EventParams &e) {
 		screenManager()->push(new TouchControlVisibilityScreen(gamePath_));
 	});
@@ -690,5 +768,6 @@ void TouchControlLayoutScreen::CreateViews() {
 	rightColumn->Add(new TextView(co->T(DeviceOrientationToString(orientation))))->SetTextSize(TextSize::Small);
 	rightColumn->Add(new Spacer(new LinearLayoutParams(1.0)));
 	float previewHeight = bounds.h * layoutAreaScale;
-	layoutView_ = rightColumn->Add(new ControlLayoutView(GetDeviceOrientation(), new LinearLayoutParams(FILL_PARENT, previewHeight)));
+	layoutView_ = rightColumn->Add(new ControlLayoutView(GetDeviceOrientation(), &setSizeMode_, screenManager(), new LinearLayoutParams(FILL_PARENT, previewHeight)));
+	layoutView_->mode_ = selectedMode_;
 }
