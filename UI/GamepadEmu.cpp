@@ -673,18 +673,13 @@ void PSPStick::ProcessTouch(float x, float y, bool down) {
 		float dx = (x - centerX_) * inv_stick_size;
 		float dy = (y - centerY_) * inv_stick_size;
 		rotateTouchHelper(dx, dy);
-		// Do not clamp to a circle! The PSP has nearly square range!
-
-		// Old code to clamp to a circle
-		// float len = sqrtf(dx * dx + dy * dy);
-		// if (len > 1.0f) {
-		//	dx /= len;
-		//	dy /= len;
-		//}
-
-		// Still need to clamp to a square
-		dx = std::min(1.0f, std::max(-1.0f, dx));
-		dy = std::min(1.0f, std::max(-1.0f, dy));
+		if (g_Config.bTouchAnalogCircleRange) {
+			const float distance = sqrtf(dx * dx + dy * dy);
+			if (distance > 1.0f) { dx /= distance; dy /= distance; }
+		} else {
+			dx = std::min(1.0f, std::max(-1.0f, dx));
+			dy = std::min(1.0f, std::max(-1.0f, dy));
+		}
 
 		__CtrlSetAnalogXY(stick_, dx, -dy);
 	} else {
@@ -872,8 +867,13 @@ void PSPCustomStick::ProcessTouch(float x, float y, bool down) {
 		float dx = (x - centerX_) * inv_stick_size;
 		float dy = (y - centerY_) * inv_stick_size;
 
-		dx = std::min(1.0f, std::max(-1.0f, dx));
-		dy = std::min(1.0f, std::max(-1.0f, dy));
+		if (g_Config.bTouchAnalogCircleRange) {
+			const float distance = sqrtf(dx * dx + dy * dy);
+			if (distance > 1.0f) { dx /= distance; dy /= distance; }
+		} else {
+			dx = std::min(1.0f, std::max(-1.0f, dx));
+			dy = std::min(1.0f, std::max(-1.0f, dy));
+		}
 
 		toggle(g_Config.iRightAnalogRight, dx > 0.5f, fabs(dx) > fabs(dy));
 		toggle(g_Config.iRightAnalogLeft, dx < -0.5f, fabs(dx) > fabs(dy));
