@@ -642,18 +642,28 @@ void PSPStick::Draw(UIContext &dc) {
 	float dx, dy;
 	__CtrlPeekAnalog(stick_, &dx, &dy);
 	rotateTouchHelper(dx, dy);
+	if (g_Config.bTouchAnalogCircleRange) {
+		const float headDistance = sqrtf(dx * dx + dy * dy);
+		if (headDistance > 1.0f) { dx /= headDistance; dy /= headDistance; }
+	} else {
+		dx = std::clamp(dx, -1.0f, 1.0f);
+		dy = std::clamp(dy, -1.0f, 1.0f);
+	}
 
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
 	float headScale = stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale;
+	const float headTravel = 0.75f * stick_size_ * scale_;
+	const float headX = stickX + dx * headTravel;
+	const float headY = stickY - dy * headTravel;
 	float pressedScale = dragPointerId_ != -1 ? GetPressedScale(scale_) : scale_;
 	if (dragPointerId_ != -1 && GetPressedStyle() == 3)
-		DrawPressedRipple(dc, stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, pressedScale * headScale, opacity);
+		DrawPressedRipple(dc, stickImageIndex_, headX, headY, pressedScale * headScale, opacity);
 	if (dragPointerId_ != -1 && GetPressedStyle() == 0 && stickDownImg_ != stickImageIndex_)
-		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * pressedScale * headScale, downBg, ALIGN_CENTER);
-	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * pressedScale * headScale, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(stickDownImg_, headX, headY, 1.0f * pressedScale * headScale, downBg, ALIGN_CENTER);
+	dc.Draw()->DrawImage(stickImageIndex_, headX, headY, 1.0f * pressedScale * headScale, colorBg, ALIGN_CENTER);
 }
 
 bool PSPStick::Touch(const TouchInput &input) {
@@ -768,14 +778,24 @@ void PSPCustomStick::Draw(UIContext &dc) {
 
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 	const float headScale = config.fRightStickHeadScale;
+	if (g_Config.bTouchAnalogCircleRange) {
+		const float headDistance = sqrtf(dx * dx + dy * dy);
+		if (headDistance > 1.0f) { dx /= headDistance; dy /= headDistance; }
+	} else {
+		dx = std::clamp(dx, -1.0f, 1.0f);
+		dy = std::clamp(dy, -1.0f, 1.0f);
+	}
+	const float headTravel = 0.375f * std::min(bounds_.w, bounds_.h);
+	const float headX = stickX + dx * headTravel;
+	const float headY = stickY - dy * headTravel;
 	if (!config.bHideStickBackground)
 		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
 	float pressedScale = dragPointerId_ != -1 ? GetPressedScale(scale_) : scale_;
 	if (dragPointerId_ != -1 && GetPressedStyle() == 3)
-		DrawPressedRipple(dc, stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, pressedScale * headScale, opacity);
+		DrawPressedRipple(dc, stickImageIndex_, headX, headY, pressedScale * headScale, opacity);
 	if (dragPointerId_ != -1 && GetPressedStyle() == 0 && stickDownImg_ != stickImageIndex_)
-		dc.Draw()->DrawImage(stickDownImg_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * pressedScale * headScale, downBg, ALIGN_CENTER);
-	dc.Draw()->DrawImage(stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, 1.0f * pressedScale * headScale, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(stickDownImg_, headX, headY, 1.0f * pressedScale * headScale, downBg, ALIGN_CENTER);
+	dc.Draw()->DrawImage(stickImageIndex_, headX, headY, 1.0f * pressedScale * headScale, colorBg, ALIGN_CENTER);
 }
 
 bool PSPCustomStick::Touch(const TouchInput &input) {
@@ -797,7 +817,15 @@ bool PSPCustomStick::Touch(const TouchInput &input) {
 	if (input.flags & TouchInputFlags::DOWN) {
 		const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 		float fac = 0.5f * config.fRightStickHeadScale - 0.5f;
-		if (dragPointerId_ == -1 && bounds_.Expand(bounds_.w*fac, bounds_.h*fac).Contains(input.x, input.y)) {
+		bool insideTouchRange = bounds_.Expand(bounds_.w * fac, bounds_.h * fac).Contains(input.x, input.y);
+		if (insideTouchRange && g_Config.bTouchAnalogCircleRange) {
+			const float radiusX = bounds_.w * (0.5f + fac);
+			const float radiusY = bounds_.h * (0.5f + fac);
+			const float dx = (input.x - bounds_.centerX()) / radiusX;
+			const float dy = (input.y - bounds_.centerY()) / radiusY;
+			insideTouchRange = dx * dx + dy * dy <= 1.0f;
+		}
+		if (dragPointerId_ == -1 && insideTouchRange) {
 			if (g_Config.bAutoCenterTouchAnalog) {
 				centerX_ = input.x;
 				centerY_ = input.y;
