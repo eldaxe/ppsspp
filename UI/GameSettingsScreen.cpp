@@ -842,15 +842,15 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		View *style = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonStyle, co->T("Button style"), touchControlStyles, 0, ARRAY_SIZE(touchControlStyles), I18NCat::CONTROLS, screenManager()));
 		style->SetEnabledPtr(&g_Config.bShowTouchControls);
 
-		static const char *touchAtlasScales[] = { "1x (Default)", "2x", "4x", "8x" };
-		PopupMultiChoice *atlasScale = new PopupMultiChoice(&g_Config.iTouchButtonAtlasScale, co->T("Touch button SVG quality"), touchAtlasScales, 0, ARRAY_SIZE(touchAtlasScales), I18NCat::CONTROLS, screenManager());
+		static const char *touchAtlasScales[] = { "1x (Default)", "2x (Medium)", "4x (High)", "8x (Very High)" };
+		PopupMultiChoice *atlasScale = new PopupMultiChoice(&g_Config.iTouchButtonAtlasScale, co->T("Button icon quality"), touchAtlasScales, 0, ARRAY_SIZE(touchAtlasScales), I18NCat::CONTROLS, screenManager());
 		controlsSettings->Add(atlasScale);
 		atlasScale->SetEnabledPtr(&g_Config.bShowTouchControls);
 		atlasScale->OnChoice.Add([this](UI::EventParams &e) {
 			screenManager()->getUIContext()->InvalidateAtlas();
 		});
 
-		CheckBox *disableTouchShadows = controlsSettings->Add(new CheckBox(&g_Config.bDisableTouchButtonShadows, co->T("Disable shadow buttons")));
+		CheckBox *disableTouchShadows = controlsSettings->Add(new CheckBox(&g_Config.bDisableTouchButtonShadows, co->T("Disable icon shadow")));
 		disableTouchShadows->SetEnabledPtr(&g_Config.bShowTouchControls);
 		disableTouchShadows->OnClick.Add([this](UI::EventParams &e) {
 			screenManager()->getUIContext()->InvalidateAtlas();
