@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "Common/System/Display.h"
+#include "Core/Config.h"
 #include "Common/System/System.h"
 #include "Common/UI/UI.h"
 #include "Common/UI/View.h"
@@ -42,15 +43,32 @@ void UIContext::Init(Draw::DrawContext *thin3d, Draw::Pipeline *uipipe, Draw::Pi
 
 void UIContext::BeginFrame() {
 	frameStartTime_ = time_now_d();
+	// Per-game config is loaded when a game starts, after UIContext may already
+	// have created its atlas. Detect the setting change here so the first game
+	// frame rebuilds the atlas without requiring the user to revisit Settings.
+	if (lastTouchButtonAtlasScale_ != g_Config.iTouchButtonAtlasScale) {
+		lastTouchButtonAtlasScale_ = g_Config.iTouchButtonAtlasScale;
+		atlasInvalid_ = true;
+	}
 	if (atlasInvalid_ || !uitexture_) {
-		if (uitexture_) {
-			uitexture_->Release();
-		}
+		// Build the replacement before releasing the current texture. Atlas generation may
+		// fail on devices with limited texture memory, especially at high SVG quality.
 		AtlasData data = atlasProvider_(draw_, AtlasChoice::General, 1.0f / g_display.dpi_scale_x, atlasInvalid_);
-		uitexture_ = data.texture;
-		_dbg_assert_(uitexture_);
-		ui_draw2d.SetAtlas(data.atlas);
-		atlasInvalid_ = false;
+		if (!data.texture || !data.atlas) {
+			WARN_LOG(Log::G3D, "Failed to create UI atlas texture; keeping the previous atlas if available");
+			if (!uitexture_) {
+				// There is no valid atlas to draw with yet. Avoid binding a null texture.
+				return;
+			}
+			atlasInvalid_ = false;
+		} else {
+			if (uitexture_) {
+				uitexture_->Release();
+			}
+			uitexture_ = data.texture;
+			ui_draw2d.SetAtlas(data.atlas);
+			atlasInvalid_ = false;
+		}
 	}
 
 	if (!fontTexture_) {
