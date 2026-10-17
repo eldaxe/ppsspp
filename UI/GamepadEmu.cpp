@@ -106,14 +106,6 @@ static u32 GetPressedColor(const UIContext &dc) {
 	return dc.GetTheme().itemDownStyle.fgColor;
 }
 
-static uint32_t GetButtonBackgroundColor(const UIContext &dc, float opacity) {
-	const u32 themeColor = GetButtonColor(dc);
-	// Surface alpha controls the button surface for both Classic fills and Border outlines.
-	// Keep it independent from the overall opacity used for the button icon.
-	return colorAlpha(themeColor, opacity * (g_Config.iTouchButtonSurfaceAlpha / 100.0f));
-}
-
-
 
 static int GetPressedStyle() {
 	// Keep rendering safe if a config contains an unsupported value.
@@ -241,7 +233,7 @@ void MultiTouchButton::Draw(UIContext &dc) {
 		opacity = GetPressedOpacity(opacity);
 
 	uint32_t colorBg = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
-	uint32_t downBg = colorAlpha(GetPressedColor(dc), opacity * 0.5f);
+	uint32_t downBg = colorAlpha(GetPressedColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f * 0.5f);
 	uint32_t color = colorAlpha(dc.GetTheme().itemStyle.fgColor, opacity);
 
 	if (isDown && GetPressedStyle() == 3) {
@@ -549,7 +541,7 @@ void PSPDpad::Draw(UIContext &dc) {
 
 		if (isDown && GetPressedStyle() == 0) {
 
-			uint32_t downBg = colorAlpha(GetPressedColor(dc), imgOpacity * 0.5f);
+			uint32_t downBg = colorAlpha(GetPressedColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f * 0.5f);
 			if (arrowIndex_ != arrowDownIndex_)
 				dc.Draw()->DrawImageRotated(arrowDownIndex_, x, y, imgScale, angle + PI, downBg, false);
 		}
