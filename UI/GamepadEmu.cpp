@@ -106,6 +106,11 @@ static u32 GetPressedColor(const UIContext &dc) {
 	return dc.GetTheme().itemDownStyle.fgColor;
 }
 
+// Match the touch-control editor's Classic fill and Border outline colors.
+static u32 GetButtonSurfaceColor() {
+	return g_Config.iTouchButtonStyle != 0 ? 0xFFFFFF : 0xc0b080;
+}
+
 
 static int GetPressedStyle() {
 	// Keep rendering safe if a config contains an unsupported value.
@@ -232,7 +237,7 @@ void MultiTouchButton::Draw(UIContext &dc) {
 	if (isDown)
 		opacity = GetPressedOpacity(opacity);
 
-	uint32_t colorBg = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
+	uint32_t colorBg = colorAlpha(GetButtonSurfaceColor(), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 	uint32_t downBg = colorAlpha(GetPressedColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f * 0.5f);
 	uint32_t color = colorAlpha(dc.GetTheme().itemStyle.fgColor, opacity);
 
@@ -546,7 +551,7 @@ void PSPDpad::Draw(UIContext &dc) {
 				dc.Draw()->DrawImageRotated(arrowDownIndex_, x, y, imgScale, angle + PI, downBg, false);
 		}
 
-		uint32_t colorBg = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
+		uint32_t colorBg = colorAlpha(GetButtonSurfaceColor(), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 		uint32_t color = colorAlpha(dc.GetTheme().itemStyle.fgColor, imgOpacity);
 
 		dc.Draw()->DrawImageRotated(arrowIndex_, x, y, imgScale, angle + PI, colorBg, false);
@@ -577,7 +582,7 @@ void PSPStick::Draw(UIContext &dc) {
 	uint32_t colorBg = colorAlpha(GetButtonColor(dc), opacity);
 	// Keep the analog base readable; surface alpha is for button artwork,
 	// while the analog base follows the configured control opacity.
-	uint32_t surfaceBgColor = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
+	uint32_t surfaceBgColor = colorAlpha(GetButtonSurfaceColor(), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 	uint32_t downBg = colorAlpha(GetPressedColor(dc), opacity * 0.5f);
 
 	if (centerX_ < 0.0f) {
@@ -700,7 +705,7 @@ void PSPCustomStick::Draw(UIContext &dc) {
 	uint32_t colorBg = colorAlpha(GetButtonColor(dc), opacity);
 	// Keep the analog base readable; surface alpha is for button artwork,
 	// while the analog base follows the configured control opacity.
-	uint32_t surfaceBgColor = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
+	uint32_t surfaceBgColor = colorAlpha(GetButtonSurfaceColor(), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 	uint32_t downBg = colorAlpha(GetPressedColor(dc), opacity * 0.5f);
 
 	if (centerX_ < 0.0f) {
@@ -1321,7 +1326,7 @@ void GestureGamepad::Draw(UIContext &dc) {
 	if (opacity <= 0.0f)
 		return;
 
-	uint32_t colorBg = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
+	uint32_t colorBg = colorAlpha(GetButtonSurfaceColor(), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 
 	if (GetZone().bAnalogGesture && dragPointerId_ != -1) {
 		dc.Draw()->DrawImage(ImageID("I_CIRCLE"), downX_, downY_, 0.7f, colorBg, ALIGN_CENTER);
