@@ -15,6 +15,7 @@
 #include "Common/Log.h"
 #include "Common/Data/Convert/ColorConv.h"
 #include "Core/Util/PathUtil.h"
+#include "Core/System.h"
 
 #include "UI/UIAtlas.h"
 
@@ -385,14 +386,16 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 	std::vector<Image> images(imageCount);
 
 	// Load button SVGs in priority order. RasterizeSVG only fills images that
-	// are still empty, so earlier files override later fallbacks per image ID.
-	// This lets a partial custom SVG override selected buttons while the rest
-	// are supplied by system and built-in assets.
-	Path textureButtons = GetSysDirectory(DIRECTORY_TEXTURES) / "buttons.svg";
-	Path systemButtons = GetSysDirectory(DIRECTORY_SYSTEM) / "buttons.svg";
-	if (File::Exists(textureButtons) && !RasterizeSVG(textureButtons.c_str(), dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
-		WARN_LOG(Log::G3D, "Failed to load texture buttons SVG: %s", textureButtons.c_str());
+	// are still empty, so per-game assets override system assets, which override
+	// built-in defaults on an image-by-image basis.
+	const std::string gameId = g_paramSFO.GetDiscID();
+	if (!gameId.empty() && IsSafePathComponent(gameId)) {
+		Path gameButtons = GetSysDirectory(DIRECTORY_TEXTURES) / gameId / "buttons.svg";
+		if (File::Exists(gameButtons) && !RasterizeSVG(gameButtons.c_str(), dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
+			WARN_LOG(Log::G3D, "Failed to load per-game buttons SVG: %s", gameButtons.c_str());
+		}
 	}
+	Path systemButtons = GetSysDirectory(DIRECTORY_SYSTEM) / "buttons.svg";
 	if (File::Exists(systemButtons) && !RasterizeSVG(systemButtons.c_str(), dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
 		WARN_LOG(Log::G3D, "Failed to load system buttons SVG: %s", systemButtons.c_str());
 	}
@@ -503,10 +506,13 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 
 static Image g_cachedUIAtlasImage;
 static float g_cachedDpiScale = 0.0f;
+static std::string g_cachedGameId;
 
 // The caller must cache the Atlas.
 Draw::Texture *GenerateUIAtlas(Draw::DrawContext *draw, Atlas *atlas, float dpiScale, bool invalidate) {
-	if (g_cachedUIAtlasImage.IsEmpty() || dpiScale != g_cachedDpiScale || invalidate) {
+	const std::string gameId = g_paramSFO.GetDiscID();
+	const bool gameChanged = gameId != g_cachedGameId;
+	if (g_cachedUIAtlasImage.IsEmpty() || dpiScale != g_cachedDpiScale || invalidate || gameChanged) {
 		INFO_LOG(Log::G3D, "Regenerating atlas (empty: %s). Dpi scale (changed: %s): %0.2f (invalidate=%d)",
 			g_cachedUIAtlasImage.IsEmpty() ? "true" : "false", dpiScale != g_cachedDpiScale ? "true" : "false", dpiScale, invalidate);
 
@@ -515,6 +521,7 @@ Draw::Texture *GenerateUIAtlas(Draw::DrawContext *draw, Atlas *atlas, float dpiS
 			ERROR_LOG(Log::G3D, "Failed to generate UI atlas!");
 			return nullptr;
 		}
+		g_cachedGameId = gameId;
 	}
 
 	g_cachedDpiScale = dpiScale;
