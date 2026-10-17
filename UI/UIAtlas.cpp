@@ -333,6 +333,12 @@ static bool RasterizeSVG(std::string_view filename, float dpiScale, int maxTextu
 					int sy = minY + y;
 					const u32 *src = (u32 *)svgImg + (sy * svgWidth + sx);
 					u32 col = *src;
+					// Analog heads are tinted with the active UI theme at draw time.
+					// Keep their alpha/detail, but remove baked-in RGB colors so the
+					// theme tint works for both built-in and user-provided buttons.svg.
+					if (shapeId == "I_STICK" || shapeId == "I_STICK_LINE") {
+						col = (col & 0xFF000000) | 0x00FFFFFF;
+					}
 					img.set1(x, y, col);
 				}
 			}
@@ -378,18 +384,23 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 	// Script fully read, now read images and rasterize the fonts.
 	std::vector<Image> images(imageCount);
 
-	if (!RasterizeSVG("ui_images/images.svg", dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
+	// Load button SVGs in priority order. RasterizeSVG only fills images that
+	// are still empty, so earlier files override later fallbacks per image ID.
+	// This lets a partial custom SVG override selected buttons while the rest
+	// are supplied by system and built-in assets.
+	Path textureButtons = GetSysDirectory(DIRECTORY_TEXTURES) / "buttons.svg";
+	Path systemButtons = GetSysDirectory(DIRECTORY_SYSTEM) / "buttons.svg";
+	if (File::Exists(textureButtons) && !RasterizeSVG(textureButtons.c_str(), dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
+		WARN_LOG(Log::G3D, "Failed to load texture buttons SVG: %s", textureButtons.c_str());
+	}
+	if (File::Exists(systemButtons) && !RasterizeSVG(systemButtons.c_str(), dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
+		WARN_LOG(Log::G3D, "Failed to load system buttons SVG: %s", systemButtons.c_str());
+	}
+	if (!RasterizeSVG("ui_images/buttons.svg", dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
 		return false;
 	}
-	Path customButtons = GetSysDirectory(DIRECTORY_SYSTEM) / "buttons.svg";
-	if (File::Exists(customButtons)) {
-		if (!RasterizeSVG(customButtons.c_str(), dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
-			return false;
-		}
-	} else {
-		if (!RasterizeSVG("ui_images/buttons.svg", dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
-			return false;
-		}
+	if (!RasterizeSVG("ui_images/images.svg", dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
+		return false;
 	}
 	Instant shadowStart = Instant::Now();
 
