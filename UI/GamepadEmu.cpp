@@ -240,7 +240,7 @@ void MultiTouchButton::Draw(UIContext &dc) {
 	if (isDown)
 		opacity = GetPressedOpacity(opacity);
 
-	uint32_t colorBg = GetButtonBackgroundColor(dc, opacity);
+	uint32_t colorBg = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 	uint32_t downBg = colorAlpha(GetPressedColor(dc), opacity * 0.5f);
 	uint32_t color = colorAlpha(dc.GetTheme().itemStyle.fgColor, opacity);
 
@@ -554,7 +554,7 @@ void PSPDpad::Draw(UIContext &dc) {
 				dc.Draw()->DrawImageRotated(arrowDownIndex_, x, y, imgScale, angle + PI, downBg, false);
 		}
 
-		uint32_t colorBg = GetButtonBackgroundColor(dc, imgOpacity);
+		uint32_t colorBg = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 		uint32_t color = colorAlpha(dc.GetTheme().itemStyle.fgColor, imgOpacity);
 
 		dc.Draw()->DrawImageRotated(arrowIndex_, x, y, imgScale, angle + PI, colorBg, false);
@@ -1329,7 +1329,7 @@ void GestureGamepad::Draw(UIContext &dc) {
 	if (opacity <= 0.0f)
 		return;
 
-	uint32_t colorBg = GetButtonBackgroundColor(dc, opacity);
+	uint32_t colorBg = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 
 	if (GetZone().bAnalogGesture && dragPointerId_ != -1) {
 		dc.Draw()->DrawImage(ImageID("I_CIRCLE"), downX_, downY_, 0.7f, colorBg, ALIGN_CENTER);
