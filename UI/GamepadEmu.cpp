@@ -582,10 +582,10 @@ void PSPStick::Draw(UIContext &dc) {
 	if (dragPointerId_ != -1)
 		opacity = GetPressedOpacity(opacity);
 
-	uint32_t colorBg = GetButtonBackgroundColor(dc, opacity);
+	uint32_t colorBg = colorAlpha(GetButtonColor(dc), opacity);
 	// Keep the analog base readable; surface alpha is for button artwork,
 	// while the analog base follows the configured control opacity.
-	uint32_t surfaceBgColor = colorAlpha(GetButtonColor(dc), opacity);
+	uint32_t surfaceBgColor = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 	uint32_t downBg = colorAlpha(GetPressedColor(dc), opacity * 0.5f);
 
 	if (centerX_ < 0.0f) {
@@ -705,10 +705,10 @@ void PSPCustomStick::Draw(UIContext &dc) {
 	if (dragPointerId_ != -1)
 		opacity = GetPressedOpacity(opacity);
 
-	uint32_t colorBg = GetButtonBackgroundColor(dc, opacity);
+	uint32_t colorBg = colorAlpha(GetButtonColor(dc), opacity);
 	// Keep the analog base readable; surface alpha is for button artwork,
 	// while the analog base follows the configured control opacity.
-	uint32_t surfaceBgColor = colorAlpha(GetButtonColor(dc), opacity);
+	uint32_t surfaceBgColor = colorAlpha(GetButtonColor(dc), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
 	uint32_t downBg = colorAlpha(GetPressedColor(dc), opacity * 0.5f);
 
 	if (centerX_ < 0.0f) {
