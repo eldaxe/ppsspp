@@ -15,6 +15,7 @@
 #include "Common/Log.h"
 #include "Common/Data/Convert/ColorConv.h"
 #include "Core/Util/PathUtil.h"
+#include "Core/ELF/ParamSFO.h"
 #include "Core/System.h"
 
 #include "UI/UIAtlas.h"
