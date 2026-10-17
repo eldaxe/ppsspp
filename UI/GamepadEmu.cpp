@@ -583,6 +583,9 @@ void PSPStick::Draw(UIContext &dc) {
 		opacity = GetPressedOpacity(opacity);
 
 	uint32_t colorBg = GetButtonBackgroundColor(dc, opacity);
+	// Keep the analog base readable; surface alpha is for button artwork,
+	// while the analog base follows the configured control opacity.
+	uint32_t surfaceBgColor = colorAlpha(GetButtonColor(dc), opacity);
 	uint32_t downBg = colorAlpha(GetPressedColor(dc), opacity * 0.5f);
 
 	if (centerX_ < 0.0f) {
@@ -600,7 +603,7 @@ void PSPStick::Draw(UIContext &dc) {
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 
 	if (!config.bHideStickBackground)
-		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, surfaceBgColor, ALIGN_CENTER);
 	float headScale = stick_ ? config.fRightStickHeadScale : config.fLeftStickHeadScale;
 	float pressedScale = dragPointerId_ != -1 ? GetPressedScale(scale_) : scale_;
 	if (dragPointerId_ != -1 && GetPressedStyle() == 3)
@@ -703,6 +706,9 @@ void PSPCustomStick::Draw(UIContext &dc) {
 		opacity = GetPressedOpacity(opacity);
 
 	uint32_t colorBg = GetButtonBackgroundColor(dc, opacity);
+	// Keep the analog base readable; surface alpha is for button artwork,
+	// while the analog base follows the configured control opacity.
+	uint32_t surfaceBgColor = colorAlpha(GetButtonColor(dc), opacity);
 	uint32_t downBg = colorAlpha(GetPressedColor(dc), opacity * 0.5f);
 
 	if (centerX_ < 0.0f) {
@@ -720,7 +726,7 @@ void PSPCustomStick::Draw(UIContext &dc) {
 	const TouchControlConfig &config = g_Config.GetTouchControlsConfig(g_display.GetDeviceOrientation());
 	const float headScale = config.fRightStickHeadScale;
 	if (!config.bHideStickBackground)
-		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(bgImg_, stickX, stickY, 1.0f * scale_, surfaceBgColor, ALIGN_CENTER);
 	float pressedScale = dragPointerId_ != -1 ? GetPressedScale(scale_) : scale_;
 	if (dragPointerId_ != -1 && GetPressedStyle() == 3)
 		DrawPressedRipple(dc, stickImageIndex_, stickX + dx * stick_size_ * scale_, stickY - dy * stick_size_ * scale_, pressedScale * headScale, opacity);
