@@ -498,6 +498,9 @@ public:
 	int iTouchButtonStyle;
 	int iTouchButtonOpacity;
 	int iTouchButtonHideSeconds;
+	// Extra raster resolution for SVG on-screen touch button assets. 1-4, default 3.
+	int iTouchButtonAtlasScale;
+	bool bDisableTouchButtonShadows = false;
 
 	// Snap touch control position
 	bool bTouchSnapToGrid;

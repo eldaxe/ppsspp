@@ -164,4 +164,5 @@ private:
 
 	UIAtlasProviderFunc atlasProvider_{};
 	bool atlasInvalid_ = false;
+	int lastTouchButtonAtlasScale_ = -1;
 };

@@ -15,6 +15,7 @@
 #include "Common/Log.h"
 #include "Common/Data/Convert/ColorConv.h"
 #include "Core/Util/PathUtil.h"
+#include "Core/Config.h"
 
 #include "UI/UIAtlas.h"
 
@@ -364,7 +365,7 @@ static bool RasterizeSVG(std::string_view filename, float dpiScale, int maxTextu
 	return true;
 }
 
-static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int maxTextureSize, const ImageMeta *imageIDs, size_t imageCount) {
+static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, float touchScaleMultiplier, Image *dest, int maxTextureSize, const ImageMeta *imageIDs, size_t imageCount) {
 	Bucket bucket;
 
 #ifdef _DEBUG
@@ -381,24 +382,24 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 	if (!RasterizeSVG("ui_images/images.svg", dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
 		return false;
 	}
+	// Apply the selected touch SVG multiplier to both user and built-in buttons.svg.
+	// RasterizeSVG stores the actual raster scale in Image::scale, so logical UI size is preserved.
+	const float touchDpiScale = dpiScale * touchScaleMultiplier;
 	Path customButtons = GetSysDirectory(DIRECTORY_SYSTEM) / "buttons.svg";
-	if (File::Exists(customButtons)) {
-		if (!RasterizeSVG(customButtons.c_str(), dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
-			return false;
-		}
-	} else {
-		if (!RasterizeSVG("ui_images/buttons.svg", dpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
-			return false;
-		}
+	const char *buttonsSVG = File::Exists(customButtons) ? customButtons.c_str() : "ui_images/buttons.svg";
+	INFO_LOG(Log::G3D, "Touch button SVG quality: %.0fx (base scale %.2f, requested raster scale %.2f)", touchScaleMultiplier, dpiScale, touchDpiScale);
+	if (!RasterizeSVG(buttonsSVG, touchDpiScale, maxTextureSize, imageIDs, imageCount, &images)) {
+		return false;
 	}
 	Instant shadowStart = Instant::Now();
 
 	// We can trivially parallelize shadowing/extension of the images.
-	ParallelRangeLoop(&g_threadManager, [&images, imageIDs](int start, int end) {
+	const bool disableTouchButtonShadows = g_Config.bDisableTouchButtonShadows;
+	ParallelRangeLoop(&g_threadManager, [&images, imageIDs, disableTouchButtonShadows](int start, int end) {
 		for (int i = start; i < end; i++) {
 			// Here we could exclude some images from the drop shadow, if desired.
 			if (!images[i].IsEmpty()) {
-				if (imageIDs[i].addShadow) {
+				if (imageIDs[i].addShadow && !disableTouchButtonShadows) {
 					// DEBUG_LOG(Log::G3D, "Adding drop shadow to %.*s", STR_VIEW(imageIDs[i].id));
 					AddDropShadow(images[i], 3, 0.66f);
 				} else {
@@ -463,6 +464,13 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 	Instant bucketStart = Instant::Now();
 	bucket.Pack2(imageWidth);
 	INFO_LOG(Log::G3D, " - Packed in %.2f ms (image size: %dx%d)", bucketStart.ElapsedMs(), bucket.w, bucket.h);
+	// The SVG's source canvas can fit maxTextureSize while the combined atlas does not.
+	// Reject oversized atlases before allocating/copying the final texture, so the caller
+	// can retry at a lower touch-button raster scale.
+	if (maxTextureSize > 0 && (bucket.w > maxTextureSize || bucket.h > maxTextureSize)) {
+		WARN_LOG(Log::G3D, "UI atlas %dx%d exceeds device texture limit %d; retrying at lower touch SVG quality", bucket.w, bucket.h, maxTextureSize);
+		return false;
+	}
 
 	Instant resolveStart = Instant::Now();
 	std::vector<Data> results = bucket.Resolve(dest);
@@ -492,21 +500,41 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 
 static Image g_cachedUIAtlasImage;
 static float g_cachedDpiScale = 0.0f;
+static int g_cachedTouchAtlasScale = -1;
+static bool g_cachedDisableTouchButtonShadows = false;
 
 // The caller must cache the Atlas.
 Draw::Texture *GenerateUIAtlas(Draw::DrawContext *draw, Atlas *atlas, float dpiScale, bool invalidate) {
-	if (g_cachedUIAtlasImage.IsEmpty() || dpiScale != g_cachedDpiScale || invalidate) {
+	if (g_cachedUIAtlasImage.IsEmpty() || dpiScale != g_cachedDpiScale || g_Config.iTouchButtonAtlasScale != g_cachedTouchAtlasScale || g_Config.bDisableTouchButtonShadows != g_cachedDisableTouchButtonShadows || invalidate) {
 		INFO_LOG(Log::G3D, "Regenerating atlas (empty: %s). Dpi scale (changed: %s): %0.2f (invalidate=%d)",
 			g_cachedUIAtlasImage.IsEmpty() ? "true" : "false", dpiScale != g_cachedDpiScale ? "true" : "false", dpiScale, invalidate);
 
-		g_cachedUIAtlasImage.clear();
-		if (!GenerateUIAtlasImage(atlas, dpiScale, &g_cachedUIAtlasImage, draw->GetDeviceCaps().maxTextureSize, g_uiImageIDs, ARRAY_SIZE(g_uiImageIDs))) {
-			ERROR_LOG(Log::G3D, "Failed to generate UI atlas!");
+		// Quality levels are user-facing values 1-4, with 3 as the default.
+		static constexpr float kTouchAtlasMultipliers[] = { 1.0f, 2.0f, 3.0f, 4.0f };
+		const int requestedQuality = std::clamp(g_Config.iTouchButtonAtlasScale, 1, (int)ARRAY_SIZE(kTouchAtlasMultipliers));
+		const int maxTextureSize = draw->GetDeviceCaps().maxTextureSize;
+		int effectiveQuality = requestedQuality;
+		bool generated = false;
+		for (; effectiveQuality >= 1; --effectiveQuality) {
+			g_cachedUIAtlasImage.clear();
+			if (GenerateUIAtlasImage(atlas, dpiScale, kTouchAtlasMultipliers[effectiveQuality - 1], &g_cachedUIAtlasImage, maxTextureSize, g_uiImageIDs, ARRAY_SIZE(g_uiImageIDs))) {
+				generated = true;
+				break;
+			}
+			WARN_LOG(Log::G3D, "Retrying UI atlas with touch SVG quality %dx", (int)kTouchAtlasMultipliers[std::max(1, effectiveQuality - 1) - 1]);
+		}
+		if (!generated) {
+			ERROR_LOG(Log::G3D, "Failed to generate UI atlas at every supported touch SVG quality");
 			return nullptr;
+		}
+		if (effectiveQuality < requestedQuality) {
+			WARN_LOG(Log::G3D, "Touch SVG quality requested %dx but atlas limits require %dx", (int)kTouchAtlasMultipliers[requestedQuality - 1], (int)kTouchAtlasMultipliers[effectiveQuality - 1]);
 		}
 	}
 
 	g_cachedDpiScale = dpiScale;
+	g_cachedTouchAtlasScale = g_Config.iTouchButtonAtlasScale;
+	g_cachedDisableTouchButtonShadows = g_Config.bDisableTouchButtonShadows;
 
 	// Create the texture.
 	Draw::TextureDesc desc{};
