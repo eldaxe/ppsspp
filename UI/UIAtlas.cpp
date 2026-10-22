@@ -15,6 +15,7 @@
 #include "Common/Log.h"
 #include "Common/Data/Convert/ColorConv.h"
 #include "Core/Util/PathUtil.h"
+#include "Core/System.h"
 
 #include "UI/UIAtlas.h"
 
@@ -333,6 +334,12 @@ static bool RasterizeSVG(std::string_view filename, float dpiScale, int maxTextu
 					int sy = minY + y;
 					const u32 *src = (u32 *)svgImg + (sy * svgWidth + sx);
 					u32 col = *src;
+					// Analog heads are tinted with the active UI theme at draw time.
+					// Keep their alpha/detail, but remove baked-in RGB colors so the
+					// theme tint works for both built-in and user-provided buttons.svg.
+					if (shapeId == "I_STICK" || shapeId == "I_STICK_LINE") {
+						col = (col & 0xFF000000) | 0x00FFFFFF;
+					}
 					img.set1(x, y, col);
 				}
 			}
