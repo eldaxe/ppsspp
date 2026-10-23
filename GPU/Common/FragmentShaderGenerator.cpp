@@ -145,6 +145,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 	bool doTexture = id.Bit(FS_BIT_DO_TEXTURE);
 	bool enableFog = id.Bit(FS_BIT_ENABLE_FOG);
 	const bool legacyPBRFragmentBase =
+		id.Bit(FS_BIT_LEGACY_PBR_ATLAS) &&
 		(linkedLegacyPBRVertexMode1 || linkedLegacyPBRVertexMode2) &&
 		LegacyPBRFragmentBase(enableFragmentTestCache, doTexture, enableFog);
 	bool enableAlphaTest = id.Bit(FS_BIT_ALPHA_TEST);

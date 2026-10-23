@@ -28,6 +28,7 @@
 #include "GPU/Common/SplineCommon.h"
 #include "GPU/Common/VertexDecoderCommon.h"
 #include "GPU/Common/SoftwareTransformCommon.h"
+#include "GPU/Common/ReplacedTexture.h"
 #include "GPU/GLES/DrawEngineGLES.h"
 #include "GPU/GLES/ShaderManagerGLES.h"
 #include "GPU/GLES/GPU_GLES.h"
@@ -314,8 +315,18 @@ void DrawEngineGLES::Flush() {
 			gstate_c.vertexFullAlpha = gstate_c.vertexFullAlpha && ((hasColor && (gstate.materialupdate & 1)) || gstate.getMaterialAmbientA() == 255) && (!gstate.isLightingEnabled() || gstate.getAmbientA() == 255);
 		}
 
+		if (!gstate.isTextureMapEnabled() || gstate.isModeClear()) {
+			legacyPBRAtlasTexture_ = false;
+		}
 		if (gstate_c.IsDirty(DIRTY_TEXTURE_IMAGE | DIRTY_TEXTURE_PARAMS) && !gstate.isModeClear() && gstate.isTextureMapEnabled()) {
 			TextureApplyResult textureResult = textureCache_->ApplyTexture(true);
+			legacyPBRAtlasTexture_ = false;
+			if (textureResult.texCacheEntry && textureResult.texCacheEntry->replacedTexture && textureResult.texCacheEntry->replacedTexture->State() == ReplacementState::ACTIVE) {
+				int replacementW = 0;
+				int replacementH = 0;
+				textureResult.texCacheEntry->replacedTexture->GetSize(0, &replacementW, &replacementH);
+				legacyPBRAtlasTexture_ = replacementW == 2048 && replacementH == 2048;
+			}
 			textureCache_->ApplySampler(textureResult, clipInfoFlags_ & ClipInfoFlags::FlatZ, false);
 			gstate_c.Clean(DIRTY_TEXTURE_IMAGE | DIRTY_TEXTURE_PARAMS);
 		} else if (gstate.getTextureAddress(0) == (gstate.getFrameBufRawAddress() | 0x04000000)) {
@@ -327,7 +338,7 @@ void DrawEngineGLES::Flush() {
 		ApplyDrawState(prim);
 		ApplyDrawStateLate(false, 0);
 		
-		LinkedShader *program = shaderManager_->ApplyFragmentShader(vsid, vshader, pipelineState_, clipInfoFlags_, false);
+		LinkedShader *program = shaderManager_->ApplyFragmentShader(vsid, vshader, pipelineState_, clipInfoFlags_, false, legacyPBRAtlasTexture_);
 		if (!program) {
 			// Failed to link. No program is bound, so drawing would use whatever was bound before.
 			goto bail;

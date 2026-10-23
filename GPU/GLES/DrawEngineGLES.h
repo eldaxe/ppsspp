@@ -98,6 +98,7 @@ private:
 	// Other
 	ShaderManagerGLES *shaderManager_ = nullptr;
 	TextureCacheGLES *textureCache_ = nullptr;
+	bool legacyPBRAtlasTexture_ = false;
 	FramebufferManagerGLES *framebufferManager_ = nullptr;
 	FragmentTestCacheGLES *fragmentTestCache_ = nullptr;
 	Draw::DrawContext *draw_;

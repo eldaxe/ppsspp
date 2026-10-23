@@ -171,7 +171,7 @@ public:
 	// This is the old ApplyShader split into two parts, because of annoying information dependencies.
 	// If you call ApplyVertexShader, you MUST call ApplyFragmentShader soon afterwards.
 	Shader *ApplyVertexShader(bool useHWTransform, u32 vertexType, ClipInfoFlags clipInfoFlags, VShaderID *VSID);
-	LinkedShader *ApplyFragmentShader(VShaderID VSID, Shader *vs, const ComputedPipelineState &pipelineState, ClipInfoFlags clipInfoFlags, bool pixelMapped);
+	LinkedShader *ApplyFragmentShader(VShaderID VSID, Shader *vs, const ComputedPipelineState &pipelineState, ClipInfoFlags clipInfoFlags, bool pixelMapped, bool legacyPBRAtlas);
 
 	void DeviceLost() override;
 	void DeviceRestore(Draw::DrawContext *draw) override;

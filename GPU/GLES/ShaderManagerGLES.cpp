@@ -704,7 +704,7 @@ Shader *ShaderManagerGLES::ApplyVertexShader(bool useHWTransform, u32 vertexType
 	return vs;
 }
 
-LinkedShader *ShaderManagerGLES::ApplyFragmentShader(VShaderID VSID, Shader *vs, const ComputedPipelineState &pipelineState, ClipInfoFlags clipInfoFlags, bool pixelMapped) {
+LinkedShader *ShaderManagerGLES::ApplyFragmentShader(VShaderID VSID, Shader *vs, const ComputedPipelineState &pipelineState, ClipInfoFlags clipInfoFlags, bool pixelMapped, bool legacyPBRAtlas) {
 	uint64_t dirty = gstate_c.GetDirtyUniforms();
 	if (dirty) {
 		if (lastShader_)
@@ -718,6 +718,10 @@ LinkedShader *ShaderManagerGLES::ApplyFragmentShader(VShaderID VSID, Shader *vs,
 		lastShader_ = nullptr;
 		gstate_c.Clean(DIRTY_FRAGMENTSHADER_STATE);
 		ComputeFragmentShaderID(&FSID, pipelineState, draw_->GetBugs(), clipInfoFlags);
+		// Only explicitly identified replacement atlases enable the legacy PBR shader path.
+		if (legacyPBRAtlas) {
+			FSID.SetBit(FS_BIT_LEGACY_PBR_ATLAS);
+		}
 		// Legacy PBR alpha is an OpenGL/GLES-only shader variant.
 		if (gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) && gstate.isTextureMapEnabled() && gstate.isFogEnabled() && gstate.isTextureAlphaUsed()) {
 			FSID.SetBit(FS_BIT_LEGACY_PBR_ALPHA);
