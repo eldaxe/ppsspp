@@ -128,7 +128,6 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		const bool linkedVSMode2 = LegacyPBRVertexMode2(
 			linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
 			linkedVSID->Bit(VS_BIT_HAS_TEXCOORD) || !linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
-			linkedVSID->Bit(VS_BIT_LIGHTING_ENABLE),
 			linkedVSID->Bit(VS_BIT_VERTEX_RANGE_CULLING));
 		p.F("// Used by vertex%016llx.glsl\n", (unsigned long long)linkedVSID->ToUint64());
 		p.F("// Linked vertex shader ID: %016llx\n", (unsigned long long)linkedVSID->ToUint64());
