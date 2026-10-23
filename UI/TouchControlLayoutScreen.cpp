@@ -614,7 +614,7 @@ void ControlLayoutView::CreateViews() {
 		DragDropButton *b = nullptr;
 		if (pos.show) {
 			// Only Border uses outline shapes; Classic uses filled shapes.
-			b = new DragDropButton(pos, key, g_Config.iTouchButtonStyle == 1 ? customKeyShapes[cfg.shape].l : customKeyShapes[cfg.shape].i, customKeyImages[cfg.image].i, bounds);
+			b = new DragDropButton(pos, key, g_Config.iTouchButtonStyle == 1 ? customKeyShapes[cfg.shape].l : customKeyShapes[cfg.shape].i, customKeyImages[cfg.image].i, bounds, summaryShow, summaryText, summaryPosition, summaryMargin);
 			b->FlipImageH(customKeyShapes[cfg.shape].f);
 			b->SetAngle(customKeyImages[cfg.image].r, customKeyShapes[cfg.shape].r);
 			controls_.push_back(b);
