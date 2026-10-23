@@ -925,8 +925,8 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 				WRITE(p, "    vec3 legacyN = v_1.xyz + legacyNormalColor * 0.5;\n");
 				WRITE(p, "    legacyN = normalize(legacyN);\n");
 				WRITE(p, "    vec3 legacyR = reflect(-v_2.xyz, legacyN);\n");
-				WRITE(p, "    float legacyM = 2.0 * sqrt(max(dot(legacyR.xy, legacyR.xy) + (legacyR.z + 1.0) * legacyR.z, 0.000001));\n");
-				WRITE(p, "    vec2 legacySphereBaseUV = vec2(legacyR.x, legacyR.y) / legacyM * 0.25;\n");
+				WRITE(p, "    float legacyM = 2.0 * sqrt(max(legacyR.x * legacyR.x + legacyR.y * legacyR.y + (legacyR.z + 1.0) * legacyR.z, 0.000001));\n");
+				WRITE(p, "    vec2 legacySphereBaseUV = (vec2(legacyR.x, legacyR.y) / legacyM + 0.5) * 0.25;\n");
 				WRITE(p, "    float legacyFogLightness = lightness(u_fogcolor.r, u_fogcolor.g, u_fogcolor.b);\n");
 				WRITE(p, "    vec3 legacyFogColor = vec3(mix(vec3(dot(u_fogcolor, vec3(0.299, 0.587, 0.114))), u_fogcolor, 0.6));\n");
 				WRITE(p, "    legacyFogColor += legacyFogLightness < 0.15 ? 0.6 - legacyFogLightness : 0.6;\n");
