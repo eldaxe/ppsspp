@@ -545,6 +545,14 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		if (writeDepth) {
 			WRITE(p, "  float gl_FragDepth;\n");
 		}
+	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
+			// The original replacement shader derives a tint from the fog color.
+			// Emit its helper outside main(), as required by GLSL.
+			WRITE(p, "float lightness(float R, float G, float B) {\n");
+			WRITE(p, "  return pow(pow(R / 1.0, 2.2) + pow(B / 1.666666, 2.2) + pow(G / 0.666666, 2.2), 1.0 / 2.2) * 0.547373;\n");
+			WRITE(p, "}\n");
+	}
+
 	} else {
 		WRITE(p, "void main() {\n");
 	}
@@ -914,11 +922,6 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		WRITE(p, "  vec4 legacyPBRColor = vec4(0.0);\n");
 
 		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
-			// The original replacement shader derives a tint from the fog color.
-			// Emit its helper outside main(), as required by GLSL.
-			WRITE(p, "float lightness(float R, float G, float B) {\n");
-			WRITE(p, "  return pow(pow(R / 1.0, 2.2) + pow(B / 1.666666, 2.2) + pow(G / 0.666666, 2.2), 1.0 / 2.2) * 0.547373;\n");
-			WRITE(p, "}\n");
 			// Match the legacy GLSL atlas layout and sampling math:
 			// base color (top-left), normal data (top-right), emissive/material
 			// selector (bottom-left), and four sphere maps (bottom-right).
