@@ -917,7 +917,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 			// The original replacement shader derives a tint from the fog color.
 			// Emit its helper outside main(), as required by GLSL.
 			WRITE(p, "float lightness(float R, float G, float B) {\n");
-			WRITE(p, "  return pow(pow(R, 2.2) + pow(G / 0.666666, 2.2) + pow(B / 1.666666, 2.2), 1.0 / 2.2) * 0.547373;\n");
+			WRITE(p, "  return pow(pow(R / 1.0, 2.2) + pow(B / 1.666666, 2.2) + pow(G / 0.666666, 2.2), 1.0 / 2.2) * 0.547373;\n");
 			WRITE(p, "}\n");
 			// Match the legacy GLSL atlas layout and sampling math:
 			// base color (top-left), normal data (top-right), emissive/material
