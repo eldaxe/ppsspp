@@ -322,10 +322,16 @@ void DrawEngineGLES::Flush() {
 			TextureApplyResult textureResult = textureCache_->ApplyTexture(true);
 			legacyPBRAtlasTexture_ = false;
 			if (textureResult.texCacheEntry && textureResult.texCacheEntry->replacedTexture && textureResult.texCacheEntry->replacedTexture->State() == ReplacementState::ACTIVE) {
-				int replacementW = 0;
-				int replacementH = 0;
-				textureResult.texCacheEntry->replacedTexture->GetSize(0, &replacementW, &replacementH);
-				legacyPBRAtlasTexture_ = replacementW == 2048 && replacementH == 2048;
+				// Explicit opt-in: place legacy PBR atlas replacements under
+				// TEXTURES/<game-id>/legacy_pbr/ and map the texture hash to that file
+				// in textures.ini. Do not infer shader semantics from image dimensions.
+				const ReplacementDesc &replacementDesc = textureResult.texCacheEntry->replacedTexture->Desc();
+				for (const std::string &filename : replacementDesc.filenames) {
+					if (filename.rfind("legacy_pbr/", 0) == 0) {
+						legacyPBRAtlasTexture_ = true;
+						break;
+					}
+				}
 			}
 			textureCache_->ApplySampler(textureResult, clipInfoFlags_ & ClipInfoFlags::FlatZ, false);
 			gstate_c.Clean(DIRTY_TEXTURE_IMAGE | DIRTY_TEXTURE_PARAMS);
