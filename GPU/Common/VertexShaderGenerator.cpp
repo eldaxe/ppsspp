@@ -165,8 +165,8 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 	}
 
 	bool texCoordInVec3 = false;
-	const bool legacyPBRVertexMode1 = LegacyPBRVertexMode1(useHWTransform, hasNormal, hasTexcoord, enableLighting, rangeCulling);
-	const bool legacyPBRVertexMode2 = LegacyPBRVertexMode2(useHWTransform, hasTexcoord, enableLighting, rangeCulling);
+	const bool legacyPBRVertexMode1 = ShaderLanguageIsOpenGL(compat.shaderLanguage) && LegacyPBRVertexMode1(useHWTransform, hasNormal, hasTexcoord, enableLighting, rangeCulling);
+	const bool legacyPBRVertexMode2 = ShaderLanguageIsOpenGL(compat.shaderLanguage) && LegacyPBRVertexMode2(useHWTransform, hasTexcoord, rangeCulling);
 	if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
 		if (legacyPBRVertexMode1)
 			p.C("// Legacy PBR vertex mode: 1 (exports flag 1 + v_1..v_8)\n");
@@ -521,21 +521,23 @@ bool GenerateVertexShader(const VShaderID &id, char *buffer, const ShaderLanguag
 		} else {
 			WRITE(p, "  mediump vec3 worldnormal = normalizeOr001(mul(vec4(0.0, 0.0, %s1.0, 0.0), u_world).xyz);\n", flipNormal ? "-" : "");
 		}
-		if (legacyPBRVertexMode1) {
-			WRITE(p, "  flag = 1;\n");
-			WRITE(p, "  mat3 v;\n");
-			WRITE(p, "  v[0] = vec3(u_view[0].xyz);\n");
-			WRITE(p, "  v[1] = vec3(u_view[1].xyz);\n");
-			WRITE(p, "  v[2] = vec3(u_view[2].xyz);\n");
-			WRITE(p, "  v_1 = vec4(worldnormal.xyz, 1.0);\n");
-			WRITE(p, "  v_2 = vec4(worldpos, 1.0);\n");
-			WRITE(p, "  v_3 = vec4(normalize(vec3(0.,10000.,2000.) * v), 1.0);\n");
-			WRITE(p, "  v_4 = vec4(normalize(vec3(0.,10000.,-2000.) * v), 1.0);\n");
-			WRITE(p, "  v_5 = vec4(v_3.x, -v_3.y, v_3.z, 1.0);\n");
-		} else if (legacyPBRVertexMode2) {
-			WRITE(p, "  flag = 2;\n");
-		} else {
-			WRITE(p, "  flag = 0;\n");
+		if (ShaderLanguageIsOpenGL(compat.shaderLanguage)) {
+			if (legacyPBRVertexMode1) {
+				WRITE(p, "  flag = 1;\n");
+				WRITE(p, "  mat3 v;\n");
+				WRITE(p, "  v[0] = vec3(u_view[0].xyz);\n");
+				WRITE(p, "  v[1] = vec3(u_view[1].xyz);\n");
+				WRITE(p, "  v[2] = vec3(u_view[2].xyz);\n");
+				WRITE(p, "  v_1 = vec4(worldnormal.xyz, 1.0);\n");
+				WRITE(p, "  v_2 = vec4(worldpos, 1.0);\n");
+				WRITE(p, "  v_3 = vec4(normalize(vec3(0.,10000.,2000.) * v), 1.0);\n");
+				WRITE(p, "  v_4 = vec4(normalize(vec3(0.,10000.,-2000.) * v), 1.0);\n");
+				WRITE(p, "  v_5 = vec4(v_3.x, -v_3.y, v_3.z, 1.0);\n");
+			} else if (legacyPBRVertexMode2) {
+				WRITE(p, "  flag = 2;\n");
+			} else {
+				WRITE(p, "  flag = 0;\n");
+			}
 		}
 		if (enableLighting || doShadeMapping) {
 			// The viewer is at infinity along view space +z: in world space, the view matrix's third column.
