@@ -919,30 +919,30 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 
 		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
 			// Match the legacy GLSL atlas layout and sampling math:
-				// base color (top-left), normal data (top-right), emissive/material
-				// selector (bottom-left), and four sphere maps (bottom-right).
+			// base color (top-left), normal data (top-right), emissive/material
+			// selector (bottom-left), and four sphere maps (bottom-right).
 			WRITE(p, "  if (flag == 1) {\n");
-				WRITE(p, "    vec4 legacyBaseColor = %s(tex, v_texcoord.xy * 0.5);\n", compat.texture);
-				WRITE(p, "    vec3 legacyNormalColor = %s(tex, vec2(0.5, 0.0) + v_texcoord.xy * 0.5).rgb;\n", compat.texture);
-				WRITE(p, "    vec4 legacyEmissive = %s(tex, vec2(0.0, 0.5) + v_texcoord.xy * 0.5);\n", compat.texture);
-				WRITE(p, "    vec3 legacyN = v_1.xyz + legacyNormalColor * 0.5;\n");
-				WRITE(p, "    legacyN = normalize(legacyN);\n");
-				WRITE(p, "    vec3 legacyR = reflect(-v_2.xyz, legacyN);\n");
-				WRITE(p, "    float legacyM = 2.0 * sqrt(max(legacyR.x * legacyR.x + legacyR.y * legacyR.y + (legacyR.z + 1.0) * legacyR.z, 0.000001));\n");
-				WRITE(p, "    vec2 legacySphereBaseUV = (vec2(legacyR.x, legacyR.y) / legacyM + 0.5) * 0.25;\n");
-				WRITE(p, "    float legacyFogLightness = lightness(u_fogcolor.r, u_fogcolor.g, u_fogcolor.b);\n");
-				WRITE(p, "    vec3 legacyFogColor = vec3(mix(vec3(dot(u_fogcolor, vec3(0.299, 0.587, 0.114))), u_fogcolor, 0.6));\n");
-				WRITE(p, "    legacyFogColor += legacyFogLightness < 0.15 ? 0.6 - legacyFogLightness : 0.6;\n");
-				WRITE(p, "    vec2 legacySphereOffset = vec2(0.75, 0.75);\n");
-				WRITE(p, "    if (legacyEmissive.a >= 0.001 && legacyEmissive.a < 0.1) legacySphereOffset = vec2(0.5, 0.5);\n");
-				WRITE(p, "    else if (legacyEmissive.a >= 0.0999 && legacyEmissive.a < 0.2) legacySphereOffset = vec2(0.75, 0.5);\n");
-				WRITE(p, "    else if (legacyEmissive.a >= 0.1999 && legacyEmissive.a < 0.3) legacySphereOffset = vec2(0.5, 0.75);\n");
-				WRITE(p, "    vec3 legacySphere = %s(tex, legacySphereOffset + legacySphereBaseUV).rgb;\n", compat.texture);
-				WRITE(p, "    legacyPBRColor = vec4(legacyBaseColor.rgb * legacySphere * legacyFogColor + legacyEmissive.rgb, v.a);\n");
-				WRITE(p, "    legacyPBRActive = true;\n");
-				WRITE(p, "  } else if (flag == 2) {\n");
-				WRITE(p, "    legacyPBRColor = %s(tex, v_texcoord.xy * 0.5);\n", compat.texture);
-				WRITE(p, "    legacyPBRActive = true;\n");
+			WRITE(p, "    vec4 legacyBaseColor = %s(tex, v_texcoord.xy * 0.5);\n", compat.texture);
+			WRITE(p, "    vec3 legacyNormalColor = %s(tex, vec2(0.5, 0.0) + v_texcoord.xy * 0.5).rgb;\n", compat.texture);
+			WRITE(p, "    vec4 legacyEmissive = %s(tex, vec2(0.0, 0.5) + v_texcoord.xy * 0.5);\n", compat.texture);
+			WRITE(p, "    vec3 legacyN = v_1.xyz + legacyNormalColor * 0.5;\n");
+			WRITE(p, "    legacyN = normalize(legacyN);\n");
+			WRITE(p, "    vec3 legacyR = reflect(-v_2.xyz, legacyN);\n");
+			WRITE(p, "    float legacyM = 2.0 * sqrt(max(legacyR.x * legacyR.x + legacyR.y * legacyR.y + (legacyR.z + 1.0) * legacyR.z, 0.000001));\n");
+			WRITE(p, "    vec2 legacySphereBaseUV = (vec2(legacyR.x, legacyR.y) / legacyM + 0.5) * 0.25;\n");
+			WRITE(p, "    float legacyFogLightness = lightness(u_fogcolor.r, u_fogcolor.g, u_fogcolor.b);\n");
+			WRITE(p, "    vec3 legacyFogColor = vec3(mix(vec3(dot(u_fogcolor, vec3(0.299, 0.587, 0.114))), u_fogcolor, 0.6));\n");
+			WRITE(p, "    legacyFogColor += legacyFogLightness < 0.15 ? 0.6 - legacyFogLightness : 0.6;\n");
+			WRITE(p, "    vec2 legacySphereOffset = vec2(0.75, 0.75);\n");
+			WRITE(p, "    if (legacyEmissive.a >= 0.001 && legacyEmissive.a < 0.1) legacySphereOffset = vec2(0.5, 0.5);\n");
+			WRITE(p, "    else if (legacyEmissive.a >= 0.0999 && legacyEmissive.a < 0.2) legacySphereOffset = vec2(0.75, 0.5);\n");
+			WRITE(p, "    else if (legacyEmissive.a >= 0.1999 && legacyEmissive.a < 0.3) legacySphereOffset = vec2(0.5, 0.75);\n");
+			WRITE(p, "    vec3 legacySphere = %s(tex, legacySphereOffset + legacySphereBaseUV).rgb;\n", compat.texture);
+			WRITE(p, "    legacyPBRColor = vec4(legacyBaseColor.rgb * legacySphere * legacyFogColor + legacyEmissive.rgb, v.a);\n");
+			WRITE(p, "    legacyPBRActive = true;\n");
+			WRITE(p, "  } else if (flag == 2) {\n");
+			WRITE(p, "    legacyPBRColor = %s(tex, v_texcoord.xy * 0.5);\n", compat.texture);
+			WRITE(p, "    legacyPBRActive = true;\n");
 			WRITE(p, "  }\n");
 			// Use the selected legacy texture result for alpha/color tests and blending.
 			WRITE(p, "  if (legacyPBRActive) v = legacyPBRColor;\n");
