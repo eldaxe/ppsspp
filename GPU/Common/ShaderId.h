@@ -110,9 +110,11 @@ enum FShaderBit : uint8_t {
 	FS_BIT_USE_FRAMEBUFFER_FETCH = 59,
 	FS_BIT_DEPTH_TEST_NEVER = 60,  // Only used on Mali. Set when depth == NEVER. We forcibly avoid writing to depth in this case, since it crashes the driver.
 	FS_BIT_SAMPLE_ARRAY_TEXTURE = 61,  // For multiview, framebuffers are array textures and we need to sample the two layers correctly.
+	// GLES-only legacy PBR atlas and Vulkan-only array-texture mode share bit 61.
+	// These modes are mutually exclusive by backend, preserving the 64-bit shader ID layout.
+	FS_BIT_LEGACY_PBR_ATLAS = FS_BIT_SAMPLE_ARRAY_TEXTURE,
 	FS_BIT_NO_DEPTH_WRITE = 62,
 	FS_BIT_LEGACY_PBR_ALPHA = 63,  // Legacy OpenGL PBR variant that bypasses the standard alpha test for atlas mode 1.
-	FS_BIT_LEGACY_PBR_ATLAS = 64,  // Explicitly identified legacy PBR replacement atlas.
 	// Free bit: 65
 };
 
