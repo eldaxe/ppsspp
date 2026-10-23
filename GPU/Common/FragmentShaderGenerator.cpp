@@ -914,6 +914,11 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		WRITE(p, "  vec4 legacyPBRColor = vec4(0.0);\n");
 
 		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
+			// The original replacement shader derives a tint from the fog color.
+			// Emit its helper outside main(), as required by GLSL.
+			WRITE(p, "float lightness(float R, float G, float B) {\n");
+			WRITE(p, "  return pow(pow(R, 2.2) + pow(G / 0.666666, 2.2) + pow(B / 1.666666, 2.2), 1.0 / 2.2) * 0.547373;\n");
+			WRITE(p, "}\n");
 			// Match the legacy GLSL atlas layout and sampling math:
 			// base color (top-left), normal data (top-right), emissive/material
 			// selector (bottom-left), and four sphere maps (bottom-right).
@@ -925,7 +930,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 			WRITE(p, "    legacyN = normalize(legacyN);\n");
 			WRITE(p, "    vec3 legacyR = reflect(-v_2.xyz, legacyN);\n");
 			WRITE(p, "    float legacyM = 2.0 * sqrt(max(legacyR.x * legacyR.x + legacyR.y * legacyR.y + (legacyR.z + 1.0) * legacyR.z, 0.000001));\n");
-			// Keep reflection coordinates inside the selected 512x512 sphere-map quadrant.\n			// The half-texel inset avoids filtering across atlas quadrant boundaries.\n			WRITE(p, "    vec2 legacySphereBaseUV = clamp((vec2(legacyR.x, legacyR.y) / legacyM + 0.5) * 0.25, vec2(0.0001220703125), vec2(0.2498779296875));\\n");
+			// Keep reflection coordinates inside the selected 512x512 sphere-map quadrant.\n			// The half-texel inset avoids filtering across atlas quadrant boundaries.\n			WRITE(p, "    vec2 legacySphereBaseUV = clamp((vec2(legacyR.x, legacyR.y) / legacyM + 0.5) * 0.25, vec2(0.0001220703125), vec2(0.2498779296875));\n");
 			WRITE(p, "    float legacyFogLightness = lightness(u_fogcolor.r, u_fogcolor.g, u_fogcolor.b);\n");
 			WRITE(p, "    vec3 legacyFogColor = vec3(mix(vec3(dot(u_fogcolor, vec3(0.299, 0.587, 0.114))), u_fogcolor, 0.6));\n");
 			WRITE(p, "    legacyFogColor += legacyFogLightness < 0.15 ? 0.6 - legacyFogLightness : 0.6;\n");
