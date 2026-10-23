@@ -98,13 +98,13 @@ float GamepadGetOpacity() {
 }
 
 static u32 GetButtonColor(const UIContext &dc) {
-	// White modulation preserves original SVG colors when theme tinting is disabled.
-	return g_Config.bDisableTouchButtonThemeColor ? 0xFFFFFFFF : dc.GetTheme().itemStyle.fgColor;
+	// Draw colors use 24-bit RGB here; white modulation preserves the SVG's original colors.
+	return g_Config.bDisableTouchButtonThemeColor ? 0xFFFFFF : dc.GetTheme().itemStyle.fgColor;
 }
 
 static u32 GetPressedColor(const UIContext &dc) {
 	// Keep original SVG colors while theme tinting is disabled, including while pressed.
-	return g_Config.bDisableTouchButtonThemeColor ? 0xFFFFFFFF : dc.GetTheme().itemDownStyle.fgColor;
+	return g_Config.bDisableTouchButtonThemeColor ? 0xFFFFFF : dc.GetTheme().itemDownStyle.fgColor;
 }
 
 // Match the touch-control editor's Classic fill and Border outline colors.
