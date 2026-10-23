@@ -916,17 +916,29 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
 			WRITE(p, "  if (flag == 1) {\n");
 			if (legacyPBRFragmentAlpha) {
-				WRITE(p, "    vec4 tex_color = t;\n");
-				WRITE(p, "    if (tex_color.a > 0.15) {\n");
-				WRITE(p, "      albedo = tex_color.rgb;\n");
-				WRITE(p, "      roughness = 1.0 - (t.a - roughness);\n");
-				WRITE(p, "      PBR__2_0();\n");
-                WRITE(p, "      legacyPBRColor = fragColor0;\n");
-                WRITE(p, "      legacyPBRActive = true;\n");
-				WRITE(p, "    } else {\n");
-				WRITE(p, "      legacyPBRColor = vec4(tex_color.rgb, 1.0);\n");
-				WRITE(p, "      legacyPBRActive = true;\n");
-				WRITE(p, "    }\n");
+				// RGBA legacy-PBR textures use a four-cell atlas:
+				// base color (top-left), tangent-space normal (top-right),
+				// material selector in alpha (bottom-left), and four sphere maps
+				// arranged as a 2x2 grid inside the bottom-right quadrant.
+				WRITE(p, "    vec2 legacyAtlasUV = fract(v_texcoord.xy);\n");
+				WRITE(p, "    vec4 legacyBaseColor = %s(tex, legacyAtlasUV * 0.5);\n", compat.texture);
+				WRITE(p, "    vec3 legacyNormalMap = %s(tex, legacyAtlasUV * 0.5 + vec2(0.5, 0.0)).xyz * 2.0 - 1.0;\n", compat.texture);
+				WRITE(p, "    float legacyMaterialID = %s(tex, legacyAtlasUV * 0.5 + vec2(0.0, 0.5)).a;\n", compat.texture);
+				WRITE(p, "    vec3 legacyGeometricNormal = normalize(v_1.xyz);\n");
+				WRITE(p, "    vec3 legacyTangentAxis = abs(legacyGeometricNormal.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);\n");
+				WRITE(p, "    vec3 legacyTangent = normalize(cross(legacyTangentAxis, legacyGeometricNormal));\n");
+				WRITE(p, "    vec3 legacyBitangent = normalize(cross(legacyGeometricNormal, legacyTangent));\n");
+				WRITE(p, "    legacyPBRNormal = normalize(mat3(legacyTangent, legacyBitangent, legacyGeometricNormal) * legacyNormalMap);\n");
+				WRITE(p, "    vec3 legacyViewDir = normalize(camPos - v_2.xyz);\n");
+				WRITE(p, "    vec3 legacyReflection = reflect(-legacyViewDir, legacyPBRNormal);\n");
+				WRITE(p, "    vec2 legacySphereUV = legacyReflection.xy / (2.0 * sqrt(max(legacyReflection.z + 1.0, 0.0001))) + 0.5;\n");
+				WRITE(p, "    vec2 legacySphereCell = legacyMaterialID < 0.25 ? vec2(0.0, 0.0) : (legacyMaterialID < 0.5 ? vec2(1.0, 0.0) : (legacyMaterialID < 0.75 ? vec2(0.0, 1.0) : vec2(1.0, 1.0)));\n");
+				WRITE(p, "    vec2 legacySphereAtlasUV = vec2(0.5, 0.5) + legacySphereCell * 0.25 + clamp(legacySphereUV, 0.0, 1.0) * 0.25;\n");
+				WRITE(p, "    legacyPBRMaterialSphere = %s(tex, legacySphereAtlasUV).rgb;\n", compat.texture);
+				WRITE(p, "    albedo = legacyBaseColor.rgb;\n");
+				WRITE(p, "    PBR__2_0();\n");
+				WRITE(p, "    legacyPBRColor = fragColor0;\n");
+				WRITE(p, "    legacyPBRActive = true;\n");
 			} else {
 				WRITE(p, "    albedo = t.xyz;\n");
 				WRITE(p, "    PBR__2_0();\n");

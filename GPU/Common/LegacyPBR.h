@@ -39,6 +39,8 @@ inline void WriteLegacyPBRVaryingFS(ShaderWriter &p, const char *shading, const 
 
 inline void WriteLegacyPBRPrelude(ShaderWriter &p) {
 	p.C("vec3 albedo;\n");
+	p.C("vec3 legacyPBRNormal = vec3(0.0, 0.0, 1.0);\n");
+	p.C("vec3 legacyPBRMaterialSphere = vec3(1.0);\n");
 	p.C("float metallic = 0.5;\n");
 	p.C("float roughness = 0.15;\n");
 	p.C("vec3 lightPositions[2];\n");
@@ -84,7 +86,7 @@ inline void WriteLegacyPBRPrelude(ShaderWriter &p) {
 	p.C("}\n");
 
 	p.C("void PBR__2_0() {\n");
-	p.C("    vec3 N = normalize(v_1.xyz);\n");
+	p.C("    vec3 N = normalize(legacyPBRNormal);\n");
 	p.C("    vec3 fogcolor = vec3(mix(\n");
 	p.C("        vec3(dot(u_fogcolor, vec3(0.299, 0.587, 0.114))),\n");
 	p.C("        u_fogcolor,\n");
@@ -148,7 +150,7 @@ inline void WriteLegacyPBRPrelude(ShaderWriter &p) {
 	p.C("            vec3 F = fresnelSchlick(clamp(dot(H, V), 0.0, 1.0), F0);\n");
 	p.C("            vec3 numerator = NDF * G * F;\n");
 	p.C("            float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.0001;\n");
-	p.C("            vec3 specular = numerator / denominator;\n");
+	p.C("            vec3 specular = (numerator / denominator) * legacyPBRMaterialSphere;\n");
 	p.C("            vec3 kS = F;\n");
 	p.C("            vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);\n");
 	p.C("            float NdotL = max(dot(N, L), 0.0);\n");
