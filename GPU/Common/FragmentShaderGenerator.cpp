@@ -70,14 +70,19 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 	}
 
 	bool texture3D = id.Bit(FS_BIT_3D_TEXTURE);
-	bool doTextureAlpha = id.Bit(FS_BIT_LEGACY_PBR_ALPHA);
-	bool arrayTexture = id.Bit(FS_BIT_SAMPLE_ARRAY_TEXTURE);
+		bool arrayTexture = id.Bit(FS_BIT_SAMPLE_ARRAY_TEXTURE);
 
 	bool linkedLegacyPBRVertexMode1 = false;
+	bool linkedLegacyPBRVertexMode2 = false;
 	if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && linkedVSID) {
 		linkedLegacyPBRVertexMode1 = LegacyPBRVertexMode1(
 			linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
 			linkedVSID->Bit(VS_BIT_HAS_NORMAL),
+			linkedVSID->Bit(VS_BIT_HAS_TEXCOORD) || !linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
+			linkedVSID->Bit(VS_BIT_LIGHTING_ENABLE),
+			linkedVSID->Bit(VS_BIT_VERTEX_RANGE_CULLING));
+		linkedLegacyPBRVertexMode2 = LegacyPBRVertexMode2(
+			linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
 			linkedVSID->Bit(VS_BIT_HAS_TEXCOORD) || !linkedVSID->Bit(VS_BIT_USE_HW_TRANSFORM),
 			linkedVSID->Bit(VS_BIT_LIGHTING_ENABLE),
 			linkedVSID->Bit(VS_BIT_VERTEX_RANGE_CULLING));
@@ -143,10 +148,9 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 	bool enableFog = id.Bit(FS_BIT_ENABLE_FOG);
 	const bool legacyPBRFragmentBase =
 		ShaderLanguageIsOpenGL(compat.shaderLanguage) &&
-		linkedLegacyPBRVertexMode1 &&
+		(linkedLegacyPBRVertexMode1 || linkedLegacyPBRVertexMode2) &&
 		doTexture &&
 		enableFog;
-	const bool legacyPBRFragmentAlpha = legacyPBRFragmentBase && doTextureAlpha;
 	bool enableAlphaTest = id.Bit(FS_BIT_ALPHA_TEST);
 
 	bool alphaTestAgainstZero = id.Bit(FS_BIT_ALPHA_AGAINST_ZERO);
@@ -909,16 +913,15 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 			WRITE(p, "  vec4 v = v_color0%s;\n", secondary);
 		}
 
-		// Legacy PBR is generated before the normal post-processing. Preserve its result for the final output.
+		// Legacy PBR is generated before post-processing so alpha/color tests and blending use its result.
 		WRITE(p, "  bool legacyPBRActive = false;\n");
 		WRITE(p, "  vec4 legacyPBRColor = vec4(0.0);\n");
 
 		if (ShaderLanguageIsOpenGL(compat.shaderLanguage) && legacyPBRFragmentBase) {
-			if (legacyPBRFragmentAlpha) {
-				// Match the legacy GLSL atlas layout and sampling math:
+			// Match the legacy GLSL atlas layout and sampling math:
 				// base color (top-left), normal data (top-right), emissive/material
 				// selector (bottom-left), and four sphere maps (bottom-right).
-				WRITE(p, "  if (flag == 1) {\n");
+			WRITE(p, "  if (flag == 1) {\n");
 				WRITE(p, "    vec4 legacyBaseColor = %s(tex, v_texcoord.xy * 0.5);\n", compat.texture);
 				WRITE(p, "    vec3 legacyNormalColor = %s(tex, vec2(0.5, 0.0) + v_texcoord.xy * 0.5).rgb;\n", compat.texture);
 				WRITE(p, "    vec4 legacyEmissive = %s(tex, vec2(0.0, 0.5) + v_texcoord.xy * 0.5);\n", compat.texture);
@@ -935,25 +938,21 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 				WRITE(p, "    else if (legacyEmissive.a >= 0.0999 && legacyEmissive.a < 0.2) legacySphereOffset = vec2(0.75, 0.5);\n");
 				WRITE(p, "    else if (legacyEmissive.a >= 0.1999 && legacyEmissive.a < 0.3) legacySphereOffset = vec2(0.5, 0.75);\n");
 				WRITE(p, "    vec3 legacySphere = %s(tex, legacySphereOffset + legacySphereBaseUV).rgb;\n", compat.texture);
-				WRITE(p, "    legacyPBRColor = vec4(legacyBaseColor.rgb * legacySphere * legacyFogColor + legacyEmissive.rgb, v.a);\n");
+				WRITE(p, "    legacyPBRColor = vec4(legacyBaseColor.rgb * legacySphere * legacyFogColor + legacyEmissive.rgb, legacyBaseColor.a);\n");
 				WRITE(p, "    legacyPBRActive = true;\n");
 				WRITE(p, "  } else if (flag == 2) {\n");
 				WRITE(p, "    legacyPBRColor = %s(tex, v_texcoord.xy * 0.5);\n", compat.texture);
 				WRITE(p, "    legacyPBRActive = true;\n");
-				WRITE(p, "  }\n");
-			} else {
-				WRITE(p, "  if (flag == 1) {\n");
-				WRITE(p, "    albedo = t.xyz;\n");
-				WRITE(p, "    PBR__2_0();\n");
-				WRITE(p, "    legacyPBRColor = fragColor0;\n");
-				WRITE(p, "    legacyPBRActive = true;\n");
-				WRITE(p, "  }\n");
-			}
+			WRITE(p, "  }\n");
+			// Use the selected legacy texture result for alpha/color tests and blending.
+			WRITE(p, "  if (legacyPBRActive) v = legacyPBRColor;\n");
 		}
 
 		if (enableFog) {
-			WRITE(p, "  float fogCoef = clamp(v_fogdepth, 0.0, 1.0);\n");
-			WRITE(p, "  v.rgb = mix(u_fogcolor, v.rgb, fogCoef);\n");
+			WRITE(p, "  if (!legacyPBRActive) {\n");
+			WRITE(p, "    float fogCoef = clamp(v_fogdepth, 0.0, 1.0);\n");
+			WRITE(p, "    v.rgb = mix(u_fogcolor, v.rgb, fogCoef);\n");
+			WRITE(p, "  }\n");
 		}
 
 		// Texture access is at half texels [0.5/256, 255.5/256], but colors are normalized [0, 255].
@@ -1211,11 +1210,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		break;
 
 	case REPLACE_ALPHA_NO:
-		if (legacyPBRFragmentBase) {
-			WRITE(p, "  %s = legacyPBRActive ? legacyPBRColor : v;\n", compat.fragColor0);
-		} else {
-			WRITE(p, "  %s = v;\n", compat.fragColor0);
-		}
+		WRITE(p, "  %s = v;\n", compat.fragColor0);
 		break;
 
 	default:
