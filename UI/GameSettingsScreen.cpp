@@ -883,6 +883,7 @@ void GameSettingsScreen::CreateControlsSettings(UI::ViewGroup *controlsSettings)
 		disableTouchShadows->OnClick.Add([this](UI::EventParams &e) { screenManager()->getUIContext()->InvalidateAtlas(); });
 		CheckBox *disableTouchThemeColor = controlsSettings->Add(new CheckBox(&g_Config.bDisableTouchButtonThemeColor, co->T("Disable theme color on touch controls")));
 		disableTouchThemeColor->SetEnabledPtr(&g_Config.bShowTouchControls);
+		disableTouchThemeColor->OnClick.Add([this](UI::EventParams &e) { screenManager()->getUIContext()->InvalidateAtlas(); });
 
 		static const char *touchButtonPressedStyles[] = { "Glow", "Enlarge", "Shrink", "Ripple" };
 		View *pressedStyle = controlsSettings->Add(new PopupMultiChoice(&g_Config.iTouchButtonPressedStyle, co->T("Button pressed style"), touchButtonPressedStyles, 0, ARRAY_SIZE(touchButtonPressedStyles), I18NCat::CONTROLS, screenManager()));
