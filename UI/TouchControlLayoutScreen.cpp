@@ -329,7 +329,7 @@ public:
 		scale_ = theScale_*layoutAreaScale;
 		float opacity = GamepadGetOpacity();
 		uint32_t colorBg = GetEditorButtonFillColor(opacity);
-		uint32_t color = colorAlpha(0xFFFFFF, opacity);
+		uint32_t color = GetEditorButtonIconColor(dc, opacity);
 
 		static const float xoff[4] = {1, 0, -1, 0};
 		static const float yoff[4] = {0, 1, 0, -1};
