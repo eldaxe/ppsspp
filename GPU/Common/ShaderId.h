@@ -113,7 +113,7 @@ enum FShaderBit : uint8_t {
 	// GLES-only legacy PBR atlas and Vulkan-only array-texture mode share bit 61.
 	// These modes are mutually exclusive by backend, preserving the 64-bit shader ID layout.
 	FS_BIT_LEGACY_PBR_ATLAS = FS_BIT_SAMPLE_ARRAY_TEXTURE,
-	FS_BIT_NO_DEPTH_WRITE = 62,
+	FS_BIT_NO_DEPTH_WRITE = 62,  // Depth test effectively off, so skip the fragment depth write.
 	FS_BIT_LEGACY_PBR_ALPHA = 63,  // Legacy OpenGL PBR variant that bypasses the standard alpha test for atlas mode 1.
 	// No free bits remain in the 64-bit fragment shader ID.
 };
