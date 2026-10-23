@@ -323,11 +323,11 @@ void DrawEngineGLES::Flush() {
 			legacyPBRAtlasTexture_ = false;
 			if (textureResult.texCacheEntry && textureResult.texCacheEntry->replacedTexture && textureResult.texCacheEntry->replacedTexture->State() == ReplacementState::ACTIVE) {
 				// Explicit opt-in: place legacy PBR atlas replacements under
-				// TEXTURES/<game-id>/legacy_pbr/ and map the texture hash to that file
+				// TEXTURES/<game-id>/GLSL/ and map the texture hash to that file
 				// in textures.ini. Do not infer shader semantics from image dimensions.
 				const ReplacementDesc &replacementDesc = textureResult.texCacheEntry->replacedTexture->Desc();
 				for (const std::string &filename : replacementDesc.filenames) {
-					if (filename.rfind("legacy_pbr/", 0) == 0) {
+					if (filename.rfind("GLSL/", 0) == 0) {
 						legacyPBRAtlasTexture_ = true;
 						break;
 					}
