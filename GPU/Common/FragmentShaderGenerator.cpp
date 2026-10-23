@@ -925,7 +925,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 			WRITE(p, "    legacyN = normalize(legacyN);\n");
 			WRITE(p, "    vec3 legacyR = reflect(-v_2.xyz, legacyN);\n");
 			WRITE(p, "    float legacyM = 2.0 * sqrt(max(legacyR.x * legacyR.x + legacyR.y * legacyR.y + (legacyR.z + 1.0) * legacyR.z, 0.000001));\n");
-			WRITE(p, "    vec2 legacySphereBaseUV = (vec2(legacyR.x, legacyR.y) / legacyM + 0.5) * 0.25;\n");
+			// Keep reflection coordinates inside the selected 512x512 sphere-map quadrant.\n			// The half-texel inset avoids filtering across atlas quadrant boundaries.\n			WRITE(p, "    vec2 legacySphereBaseUV = clamp((vec2(legacyR.x, legacyR.y) / legacyM + 0.5) * 0.25, vec2(0.0001220703125), vec2(0.2498779296875));\\n");
 			WRITE(p, "    float legacyFogLightness = lightness(u_fogcolor.r, u_fogcolor.g, u_fogcolor.b);\n");
 			WRITE(p, "    vec3 legacyFogColor = vec3(mix(vec3(dot(u_fogcolor, vec3(0.299, 0.587, 0.114))), u_fogcolor, 0.6));\n");
 			WRITE(p, "    legacyFogColor += legacyFogLightness < 0.15 ? 0.6 - legacyFogLightness : 0.6;\n");
