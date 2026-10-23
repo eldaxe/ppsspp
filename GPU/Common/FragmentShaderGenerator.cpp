@@ -933,6 +933,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 			WRITE(p, "    if (legacyEmissive.a >= 0.001 && legacyEmissive.a < 0.1) legacySphereOffset = vec2(0.5, 0.5);\n");
 			WRITE(p, "    else if (legacyEmissive.a >= 0.0999 && legacyEmissive.a < 0.2) legacySphereOffset = vec2(0.75, 0.5);\n");
 			WRITE(p, "    else if (legacyEmissive.a >= 0.1999 && legacyEmissive.a < 0.3) legacySphereOffset = vec2(0.5, 0.75);\n");
+			WRITE(p, "    else if (legacyEmissive.a >= 0.2999 && legacyEmissive.a < 0.4) legacySphereOffset = vec2(0.75, 0.75);\n");
 			WRITE(p, "    vec3 legacySphere = %s(tex, legacySphereOffset + legacySphereBaseUV).rgb;\n", compat.texture);
 			WRITE(p, "    legacyPBRColor = vec4(legacyBaseColor.rgb * legacySphere * legacyFogColor + legacyEmissive.rgb, v.a);\n");
 			WRITE(p, "    legacyPBRActive = true;\n");
