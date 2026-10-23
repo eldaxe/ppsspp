@@ -44,6 +44,12 @@ static u32 GetButtonColor() {
 	return g_Config.iTouchButtonStyle != 0 ? 0xFFFFFF : 0xc0b080;
 }
 
+// Button surfaces use their own fill color; theme tint applies to the foreground icons.
+static u32 GetEditorButtonIconColor(const UIContext &dc, float opacity) {
+	const u32 tint = g_Config.bDisableTouchButtonThemeColor ? 0xFFFFFF : dc.GetTheme().itemStyle.fgColor;
+	return colorAlpha(tint, opacity);
+}
+
 // Match gameplay's Button fill opacity for the background only.
 static u32 GetEditorButtonFillColor(float opacity) {
 	const float fillOpacity = g_Config.iTouchButtonStyle == 0
@@ -194,7 +200,7 @@ public:
 		scale_ = theScale_*layoutAreaScale;
 		float opacity = GamepadGetOpacity();
 		uint32_t colorBg = GetEditorButtonFillColor(opacity);
-		uint32_t color = colorAlpha(0xFFFFFF, opacity);
+		uint32_t color = GetEditorButtonIconColor(dc, opacity);
 
 		int centerX = bounds_.centerX();
 		int centerY = bounds_.centerY();
@@ -368,12 +374,14 @@ public:
 
 		float opacity = GamepadGetOpacity();
 		uint32_t colorBg = GetEditorButtonFillColor(opacity);
+		uint32_t colorHead = GetEditorButtonIconColor(dc, opacity);
 
 		const ImageID stickImage = g_Config.iTouchButtonStyle == 1 ? ImageID("I_STICK_LINE") : ImageID("I_STICK");
 		const ImageID stickBg = g_Config.iTouchButtonStyle == 1 ? ImageID("I_STICK_BG_LINE") : ImageID("I_STICK_BG");
 
+		// Keep I_STICK_BG as the independently configured surface; theme tint only affects I_STICK.
 		dc.Draw()->DrawImage(stickBg, bounds_.centerX(), bounds_.centerY(), scale_, colorBg, ALIGN_CENTER);
-		dc.Draw()->DrawImage(stickImage, bounds_.centerX(), bounds_.centerY(), scale_ * spacing_, colorBg, ALIGN_CENTER);
+		dc.Draw()->DrawImage(stickImage, bounds_.centerX(), bounds_.centerY(), scale_ * spacing_, colorHead, ALIGN_CENTER);
 
 		scale_ = theScale_ / layoutAreaScale;
 	}
