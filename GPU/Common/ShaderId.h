@@ -115,7 +115,7 @@ enum FShaderBit : uint8_t {
 	FS_BIT_LEGACY_PBR_ATLAS = FS_BIT_SAMPLE_ARRAY_TEXTURE,
 	FS_BIT_NO_DEPTH_WRITE = 62,
 	FS_BIT_LEGACY_PBR_ALPHA = 63,  // Legacy OpenGL PBR variant that bypasses the standard alpha test for atlas mode 1.
-	// Free bit: 65
+	// No free bits remain in the 64-bit fragment shader ID.
 };
 
 static inline FShaderBit operator +(FShaderBit bit, int i) {
