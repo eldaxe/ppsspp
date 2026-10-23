@@ -1013,6 +1013,86 @@ static const ConfigSetting controlSettings[] = {
 	ConfigSetting("Custom17Mapping", "Custom17Image", "Custom17Shape", "Custom17Toggle", "Custom17Repeat", SETTING_IDX(g_Config, CustomButton, 17), {0, 2, 9, false, false}, CfgFlag::PER_GAME),
 	ConfigSetting("Custom18Mapping", "Custom18Image", "Custom18Shape", "Custom18Toggle", "Custom18Repeat", SETTING_IDX(g_Config, CustomButton, 18), {0, 3, 9, false, false}, CfgFlag::PER_GAME),
 	ConfigSetting("Custom19Mapping", "Custom19Image", "Custom19Shape", "Custom19Toggle", "Custom19Repeat", SETTING_IDX(g_Config, CustomButton, 19), {0, 4, 9, false, false}, CfgFlag::PER_GAME),
+	ConfigSetting("Custom0Summary", SETTING(g_Config, bCustomButtonSummary[0]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom1Summary", SETTING(g_Config, bCustomButtonSummary[1]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom2Summary", SETTING(g_Config, bCustomButtonSummary[2]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom3Summary", SETTING(g_Config, bCustomButtonSummary[3]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom4Summary", SETTING(g_Config, bCustomButtonSummary[4]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom5Summary", SETTING(g_Config, bCustomButtonSummary[5]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom6Summary", SETTING(g_Config, bCustomButtonSummary[6]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom7Summary", SETTING(g_Config, bCustomButtonSummary[7]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom8Summary", SETTING(g_Config, bCustomButtonSummary[8]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom9Summary", SETTING(g_Config, bCustomButtonSummary[9]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom10Summary", SETTING(g_Config, bCustomButtonSummary[10]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom11Summary", SETTING(g_Config, bCustomButtonSummary[11]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom12Summary", SETTING(g_Config, bCustomButtonSummary[12]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom13Summary", SETTING(g_Config, bCustomButtonSummary[13]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom14Summary", SETTING(g_Config, bCustomButtonSummary[14]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom15Summary", SETTING(g_Config, bCustomButtonSummary[15]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom16Summary", SETTING(g_Config, bCustomButtonSummary[16]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom17Summary", SETTING(g_Config, bCustomButtonSummary[17]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom18Summary", SETTING(g_Config, bCustomButtonSummary[18]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom19Summary", SETTING(g_Config, bCustomButtonSummary[19]), false, CfgFlag::PER_GAME),
+	ConfigSetting("Custom0SummaryText", SETTING(g_Config, sCustomButtonSummaryText[0]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom1SummaryText", SETTING(g_Config, sCustomButtonSummaryText[1]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom2SummaryText", SETTING(g_Config, sCustomButtonSummaryText[2]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom3SummaryText", SETTING(g_Config, sCustomButtonSummaryText[3]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom4SummaryText", SETTING(g_Config, sCustomButtonSummaryText[4]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom5SummaryText", SETTING(g_Config, sCustomButtonSummaryText[5]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom6SummaryText", SETTING(g_Config, sCustomButtonSummaryText[6]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom7SummaryText", SETTING(g_Config, sCustomButtonSummaryText[7]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom8SummaryText", SETTING(g_Config, sCustomButtonSummaryText[8]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom9SummaryText", SETTING(g_Config, sCustomButtonSummaryText[9]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom10SummaryText", SETTING(g_Config, sCustomButtonSummaryText[10]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom11SummaryText", SETTING(g_Config, sCustomButtonSummaryText[11]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom12SummaryText", SETTING(g_Config, sCustomButtonSummaryText[12]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom13SummaryText", SETTING(g_Config, sCustomButtonSummaryText[13]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom14SummaryText", SETTING(g_Config, sCustomButtonSummaryText[14]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom15SummaryText", SETTING(g_Config, sCustomButtonSummaryText[15]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom16SummaryText", SETTING(g_Config, sCustomButtonSummaryText[16]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom17SummaryText", SETTING(g_Config, sCustomButtonSummaryText[17]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom18SummaryText", SETTING(g_Config, sCustomButtonSummaryText[18]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom19SummaryText", SETTING(g_Config, sCustomButtonSummaryText[19]), "", CfgFlag::PER_GAME),
+	ConfigSetting("Custom0SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[0]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom1SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[1]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom2SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[2]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom3SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[3]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom4SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[4]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom5SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[5]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom6SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[6]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom7SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[7]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom8SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[8]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom9SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[9]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom10SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[10]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom11SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[11]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom12SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[12]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom13SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[13]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom14SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[14]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom15SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[15]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom16SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[16]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom17SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[17]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom18SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[18]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom19SummaryPos", SETTING(g_Config, iCustomButtonSummaryPosition[19]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom0SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[0]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom1SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[1]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom2SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[2]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom3SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[3]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom4SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[4]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom5SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[5]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom6SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[6]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom7SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[7]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom8SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[8]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom9SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[9]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom10SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[10]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom11SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[11]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom12SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[12]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom13SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[13]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom14SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[14]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom15SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[15]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom16SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[16]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom17SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[17]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom18SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[18]), 0, CfgFlag::PER_GAME),
+	ConfigSetting("Custom19SummaryMargin", SETTING(g_Config, iCustomButtonSummaryMargin[19]), 0, CfgFlag::PER_GAME),
 
 	ConfigSetting("TiltBaseAngleY", SETTING(g_Config, fTiltBaseAngleY), 0.9f, CfgFlag::PER_GAME),
 	ConfigSetting("TiltInvertX", SETTING(g_Config, bInvertTiltX), false, CfgFlag::PER_GAME),
@@ -1029,7 +1109,15 @@ static const ConfigSetting controlSettings[] = {
 	ConfigSetting("DisableDpadDiagonals", SETTING(g_Config, bDisableDpadDiagonals), false, CfgFlag::PER_GAME),
 	ConfigSetting("GamepadOnlyFocused", SETTING(g_Config, bGamepadOnlyFocused), false, CfgFlag::PER_GAME),
 	ConfigSetting("TouchButtonStyle", SETTING(g_Config, iTouchButtonStyle), 1, CfgFlag::PER_GAME),
+	ConfigSetting("TouchButtonPressedStyle", SETTING(g_Config, iTouchButtonPressedStyle), 0, CfgFlag::PER_GAME),
 	ConfigSetting("TouchButtonOpacity", SETTING(g_Config, iTouchButtonOpacity), 65, CfgFlag::PER_GAME),
+	ConfigSetting("TouchButtonSurfaceAlpha", SETTING(g_Config, iTouchButtonSurfaceAlpha), 25, CfgFlag::PER_GAME),
+	ConfigSetting("TouchAnalogHeadOpacity", SETTING(g_Config, iTouchAnalogHeadOpacity), 65, CfgFlag::PER_GAME),
+	ConfigSetting("TouchButtonEnlargePercent", SETTING(g_Config, iTouchButtonEnlargePercent), 150, CfgFlag::PER_GAME),
+	ConfigSetting("TouchButtonShrinkPercent", SETTING(g_Config, iTouchButtonShrinkPercent), 67, CfgFlag::PER_GAME),
+	ConfigSetting("TouchButtonAtlasScale", SETTING(g_Config, iTouchButtonAtlasScale), 3, CfgFlag::PER_GAME),
+	ConfigSetting("DisableTouchButtonShadows", SETTING(g_Config, bDisableTouchButtonShadows), false, CfgFlag::PER_GAME),
+	ConfigSetting("DisableTouchButtonThemeColor", SETTING(g_Config, bDisableTouchButtonThemeColor), false, CfgFlag::PER_GAME),
 	ConfigSetting("TouchButtonHideSeconds", SETTING(g_Config, iTouchButtonHideSeconds), 8, CfgFlag::PER_GAME),
 	ConfigSetting("AutoCenterTouchAnalog", SETTING(g_Config, bAutoCenterTouchAnalog), false, CfgFlag::PER_GAME),
 	ConfigSetting("StickyTouchDPad", SETTING(g_Config, bStickyTouchDPad), false, CfgFlag::PER_GAME),
@@ -1064,6 +1152,7 @@ static const ConfigSetting controlSettings[] = {
 
 	ConfigSetting("SystemControls", SETTING(g_Config, bSystemControls), true, CfgFlag::DEFAULT),
 	ConfigSetting("RapidFileInterval", SETTING(g_Config, iRapidFireInterval), 5, CfgFlag::DEFAULT),
+	ConfigSetting("TouchLayoutSelection", SETTING(g_Config, iTouchLayoutSelectionSaved), 1, CfgFlag::PER_GAME),
 
 #if PPSSPP_PLATFORM(WINDOWS)
 	ConfigSetting("AllowHIDInput", SETTING(g_Config, bAllowHIDInput), true, CfgFlag::DEFAULT),
@@ -1207,6 +1296,8 @@ static const ConfigSectionMeta g_sectionMeta[] = {
 	{ &g_Config.displayLayoutPortrait, displayLayoutSettings, ARRAY_SIZE(displayLayoutSettings), "DisplayLayout.Portrait"},  // These we don't want to read from the old settings, since for most people, those settings will be bad.
 	{ &g_Config.touchControlsLandscape, touchControlSettings, ARRAY_SIZE(touchControlSettings), "TouchControls.Landscape", "Control" },  // We read the old settings from [Control], since most people played in landscape before.
 	{ &g_Config.touchControlsPortrait, touchControlSettings, ARRAY_SIZE(touchControlSettings), "TouchControls.Portrait"},  // These we don't want to read from the old settings, since for most people, those settings will be bad.
+	{ &g_Config.touchControlsLandscapeLayout2, touchControlSettings, ARRAY_SIZE(touchControlSettings), "TouchControls.LandscapeLayout2" },
+	{ &g_Config.touchControlsPortraitLayout2, touchControlSettings, ARRAY_SIZE(touchControlSettings), "TouchControls.PortraitLayout2" },
 	{ &g_Config.gestureControls[0], gestureControlSettings, ARRAY_SIZE(gestureControlSettings), "GestureControls.Left", "General"},  // We read the old settings from [General], since most of them used to be there (except the analog stuff).
 	{ &g_Config.gestureControls[1], gestureControlSettings, ARRAY_SIZE(gestureControlSettings), "GestureControls.Right", "General"},  // We read the old settings from [General], since most of them used to be there (except the analog stuff).
 };
@@ -1469,7 +1560,9 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	// but these configs shouldn't contain older versions anyhow
 	_dbg_assert_(!IsGameSpecific());
 
+	EnsureSecondaryLayoutsInitialized();
 	PostLoadCleanup();
+	g_Config.iTouchLayoutSelection = g_Config.iTouchLayoutSelectionSaved;
 
 	INFO_LOG(Log::Config, "Config loaded: '%s' (%0.1f ms)", iniFilename_.c_str(), (time_now_d() - startTime) * 1000.0);
 }
@@ -2003,6 +2096,7 @@ bool Config::LoadGameConfig(const std::string &gameId) {
 	PostLoadCleanup();
 
 	DEBUG_LOG(Log::Config, "Game-specific config loaded: %s", gameId_.c_str());
+	g_Config.iTouchLayoutSelection = g_Config.iTouchLayoutSelectionSaved;
 	return true;
 }
 
@@ -2184,4 +2278,50 @@ int MultiplierToVolume100(float multiplier) {
 
 float UIScaleFactorToMultiplier(int factor) {
 	return powf(2.0f, (float)factor / 8.0f);
+}
+void Config::SwapTouchControlsLayouts() {
+	// Instead of swapping the large layout structs themselves,
+	// just toggle the selection between layout 1 and 2.
+	// This is much safer: avoids invalidating any references/pointers
+	// to the layout structs, and is atomic.
+	if (iTouchLayoutSelection == 1) {
+		iTouchLayoutSelection = 2;
+	} else {
+		iTouchLayoutSelection = 1;
+	}
+	// Note: do NOT auto-save here. Caller should persist if desired.
+}
+
+void Config::EnsureSecondaryLayoutsInitialized() {
+	auto IsConfigured = [](const TouchControlConfig &c) {
+		// If any position has been set (x >= 0), or any custom button is visible,
+		// consider the layout configured.
+		auto posSet = [](const ConfigTouchPos &p) { return p.x >= 0.0f || p.y >= 0.0f; };
+
+		if (posSet(c.touchActionButtonCenter) || posSet(c.touchDpad) || posSet(c.touchStartKey) ||
+			posSet(c.touchSelectKey) || posSet(c.touchFastForwardKey) || posSet(c.touchLKey) ||
+			posSet(c.touchRKey) || posSet(c.touchAnalogStick) || posSet(c.touchRightAnalogStick) ||
+			posSet(c.touchPauseKey)) {
+			return true;
+		}
+
+		for (size_t i = 0; i < TouchControlConfig::CUSTOM_BUTTON_COUNT; ++i) {
+			if (c.touchCustom[i].show)
+				return true;
+			if (posSet(c.touchCustom[i]))
+				return true;
+		}
+
+		return false;
+	};
+
+	if (!IsConfigured(touchControlsPortraitLayout2)) {
+		// Use preset defaults for the secondary layout instead of copying
+		// the primary layout. This avoids unintentionally duplicating
+		// user-customized primary layouts into layout 2.
+		touchControlsPortraitLayout2.ResetToDefault("TouchControls.PortraitLayout2");
+	}
+	if (!IsConfigured(touchControlsLandscapeLayout2)) {
+		touchControlsLandscapeLayout2.ResetToDefault("TouchControls.LandscapeLayout2");
+	}
 }

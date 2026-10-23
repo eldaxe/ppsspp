@@ -503,9 +503,17 @@ public:
 	bool bDisableDpadDiagonals;
 	bool bGamepadOnlyFocused;
 
-	// Control Style
+	// On-screen button appearance and pressed feedback.
 	int iTouchButtonStyle;
+	int iTouchButtonPressedStyle;
 	int iTouchButtonOpacity;
+	int iTouchButtonSurfaceAlpha;
+	int iTouchAnalogHeadOpacity;
+	int iTouchButtonEnlargePercent;
+	int iTouchButtonShrinkPercent;
+	int iTouchButtonAtlasScale;
+	bool bDisableTouchButtonShadows = false;
+	bool bDisableTouchButtonThemeColor = false;
 	int iTouchButtonHideSeconds;
 
 	// Snap touch control position
@@ -524,8 +532,18 @@ public:
 	TouchControlConfig touchControlsLandscape;
 	TouchControlConfig touchControlsPortrait;
 
+	// Secondary touch layout used by the Swap Layout virtual key.
+	TouchControlConfig touchControlsLandscapeLayout2;
+	TouchControlConfig touchControlsPortraitLayout2;
+	int iTouchLayoutSelection = 1;
+	int iTouchLayoutSelectionSaved = 1;
+
 	// These are shared between portrait and landscape, just the positions aren't.
 	ConfigCustomButton CustomButton[TouchControlConfig::CUSTOM_BUTTON_COUNT];
+	bool bCustomButtonSummary[TouchControlConfig::CUSTOM_BUTTON_COUNT]{};
+	std::string sCustomButtonSummaryText[TouchControlConfig::CUSTOM_BUTTON_COUNT];
+	int iCustomButtonSummaryPosition[TouchControlConfig::CUSTOM_BUTTON_COUNT]{};
+	int iCustomButtonSummaryMargin[TouchControlConfig::CUSTOM_BUTTON_COUNT]{};
 
 	// Ignored on iOS and other platforms that lack pause.
 	bool bShowTouchPause;
@@ -794,7 +812,30 @@ public:
 		return orientation == DeviceOrientation::Portrait ? touchControlsPortrait : touchControlsLandscape;
 	}
 
+	// Get the touched control config based on current layout selection
+	const TouchControlConfig &GetCurrentTouchControlsConfig(DeviceOrientation orientation) const {
+		if (iTouchLayoutSelection == 2) {
+			return orientation == DeviceOrientation::Portrait ? touchControlsPortraitLayout2 : touchControlsLandscapeLayout2;
+		}
+		return orientation == DeviceOrientation::Portrait ? touchControlsPortrait : touchControlsLandscape;
+	}
+	TouchControlConfig &GetCurrentTouchControlsConfig(DeviceOrientation orientation) {
+		if (iTouchLayoutSelection == 2) {
+			return orientation == DeviceOrientation::Portrait ? touchControlsPortraitLayout2 : touchControlsLandscapeLayout2;
+		}
+		return orientation == DeviceOrientation::Portrait ? touchControlsPortrait : touchControlsLandscape;
+	}
+
+	// Exchange layout selections between mode 1 and 2
+	void SwapTouchControlsLayouts();
+
+	// Ensure layout2 is initialized as a copy of layout1 if empty
+	void EnsureSecondaryLayoutsInitialized();
+
 	static int GetDefaultValueInt(int *configSetting);
+	// Initialize Layout 2 as copy of Layout 1 if not already configured
+	void InitializeLayout2IfNeeded();
+
 
 	void DoNotSaveSetting(void *configSetting) {
 		settingsNotToSave_.push_back(configSetting);
