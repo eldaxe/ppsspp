@@ -971,7 +971,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		if (enableAlphaTest) {
 			*fragmentShaderFlags |= FragmentShaderFlags::USES_DISCARD;
 			if (legacyPBRFragmentBase)
-				WRITE(p, "  if (!(legacyPBRActive && flag == 1)) {\\n");
+				WRITE(p, "  if (!(legacyPBRActive && flag == 1)) {\n");
 
 			if (alphaTestAgainstZero) {
 				// When testing against 0 (extremely common), we can avoid some math.
@@ -1008,7 +1008,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 				}
 			}
 			if (legacyPBRFragmentBase)
-				WRITE(p, "  }\\n");
+				WRITE(p, "  }\n");
 		}
 
 		if (enableColorTest) {
