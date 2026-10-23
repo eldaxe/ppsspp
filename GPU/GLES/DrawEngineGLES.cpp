@@ -392,10 +392,20 @@ void DrawEngineGLES::Flush() {
 
 		bool textureNeedsApply = false;
 		TextureApplyResult textureResult;
+		if (!gstate.isTextureMapEnabled() || gstate.isModeClear()) {
+			legacyPBRAtlasTexture_ = false;
+		}
 		if (gstate_c.IsDirty(DIRTY_TEXTURE_IMAGE | DIRTY_TEXTURE_PARAMS) && !gstate.isModeClear() && gstate.isTextureMapEnabled()) {
 			gstate_c.Clean(DIRTY_TEXTURE_IMAGE | DIRTY_TEXTURE_PARAMS);
 			gstate_c.dstSquared = false;
 			textureResult = textureCache_->ApplyTexture(true);
+			legacyPBRAtlasTexture_ = false;
+			if (textureResult.texCacheEntry && textureResult.texCacheEntry->replacedTexture && textureResult.texCacheEntry->replacedTexture->State() == ReplacementState::ACTIVE) {
+				int replacementW = 0;
+				int replacementH = 0;
+				textureResult.texCacheEntry->replacedTexture->GetSize(0, &replacementW, &replacementH);
+				legacyPBRAtlasTexture_ = replacementW == 2048 && replacementH == 2048;
+			}
 			textureNeedsApply = true;
 		} else if (gstate.getTextureAddress(0) == (gstate.getFrameBufRawAddress() | 0x04000000)) {
 			// This catches the case of clearing a texture. (#10957)
@@ -425,7 +435,7 @@ void DrawEngineGLES::Flush() {
 		ApplyDrawState(prim);
 		ApplyDrawStateLate(result.setStencil, result.stencilValue);
 
-		LinkedShader *linked = shaderManager_->ApplyFragmentShader(vsid, vshader, pipelineState_, clipInfoFlags_, result.pixelMapped);
+		LinkedShader *linked = shaderManager_->ApplyFragmentShader(vsid, vshader, pipelineState_, clipInfoFlags_, result.pixelMapped, legacyPBRAtlasTexture_);
 		if (!linked) {
 			// Not much we can do here. Let's skip drawing.
 			goto bail;
