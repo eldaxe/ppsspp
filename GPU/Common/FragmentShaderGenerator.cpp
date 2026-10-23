@@ -967,7 +967,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 		const char *discardStatement = testForceToZero ? "v.a = 0.0;" : "DISCARD;";
 		if (enableAlphaTest) {
 			*fragmentShaderFlags |= FragmentShaderFlags::USES_DISCARD;
-			if (legacyPBRFragmentBase)
+			if (legacyPBRFragmentBase && id.Bit(FS_BIT_LEGACY_PBR_ALPHA))
 				WRITE(p, "  if (!(legacyPBRActive && flag == 1)) {\n");
 
 			if (alphaTestAgainstZero) {
@@ -1004,7 +1004,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 					WRITE(p, "  %s\n", discardStatement);
 				}
 			}
-			if (legacyPBRFragmentBase)
+			if (legacyPBRFragmentBase && id.Bit(FS_BIT_LEGACY_PBR_ALPHA))
 				WRITE(p, "  }\n");
 		}
 
