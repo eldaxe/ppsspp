@@ -643,8 +643,9 @@ void PSPStick::Draw(UIContext &dc) {
 	if (dragPointerId_ != -1)
 		headOpacity = GetPressedOpacity(headOpacity);
 
-	// Use white as the modulation color so built-in and custom SVG RGB colors remain intact.
-	uint32_t colorBg = colorAlpha(0xFFFFFFFF, headOpacity);
+	// Match normal touch-button tinting during gameplay; preserve original SVG colors when theme tinting is disabled.
+	const u32 headColor = dragPointerId_ != -1 ? GetPressedColor(dc) : GetButtonColor(dc);
+	uint32_t colorBg = colorAlpha(headColor, headOpacity);
 	// Keep the analog base readable; surface alpha is for button artwork,
 	// while the analog base follows the configured control opacity.
 	uint32_t surfaceBgColor = colorAlpha(GetButtonSurfaceColor(), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
@@ -772,8 +773,9 @@ void PSPCustomStick::Draw(UIContext &dc) {
 	if (dragPointerId_ != -1)
 		headOpacity = GetPressedOpacity(headOpacity);
 
-	// Use white as the modulation color so built-in and custom SVG RGB colors remain intact.
-	uint32_t colorBg = colorAlpha(0xFFFFFFFF, headOpacity);
+	// Match normal touch-button tinting during gameplay; preserve original SVG colors when theme tinting is disabled.
+	const u32 headColor = dragPointerId_ != -1 ? GetPressedColor(dc) : GetButtonColor(dc);
+	uint32_t colorBg = colorAlpha(headColor, headOpacity);
 	// Keep the analog base readable; surface alpha is for button artwork,
 	// while the analog base follows the configured control opacity.
 	uint32_t surfaceBgColor = colorAlpha(GetButtonSurfaceColor(), g_Config.iTouchButtonSurfaceAlpha / 100.0f);
