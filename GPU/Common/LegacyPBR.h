@@ -23,8 +23,10 @@ inline bool LegacyPBRVertexMode2(bool useHWTransform, bool hasTexcoord, bool ver
 	return useHWTransform && hasTexcoord && vertexRangeCulling;
 }
 
-inline bool LegacyPBRFragmentBase(bool enableFragmentTestCache, bool doTexture, bool enableFog) {
-	return enableFragmentTestCache && doTexture && enableFog;
+inline bool LegacyPBRFragmentBase(bool doTexture, bool enableFog) {
+	// The custom PBR shader path is independent of PPSSPP's fragment test cache.
+	// That cache is an optimization and must not disable the generated shader variant.
+	return doTexture && enableFog;
 }
 
 inline void WriteLegacyPBRVaryingVS(ShaderWriter &p, const char *varying) {
