@@ -16,8 +16,11 @@ inline bool LegacyPBRVertexMode1(bool useHWTransform, bool hasNormal, bool hasTe
 	return useHWTransform && hasNormal && hasTexcoord && enableLighting && vertexRangeCulling;
 }
 
-inline bool LegacyPBRVertexMode2(bool useHWTransform, bool hasTexcoord, bool enableLighting, bool vertexRangeCulling) {
-	return useHWTransform && hasTexcoord && enableLighting && vertexRangeCulling;
+// The legacy mode-2 shader (0x2006410) does not require lighting.
+// Keep its vertex-state requirements separate from fragment requirements
+// (texturing and fog), which are checked by the fragment generator.
+inline bool LegacyPBRVertexMode2(bool useHWTransform, bool hasTexcoord, bool vertexRangeCulling) {
+	return useHWTransform && hasTexcoord && vertexRangeCulling;
 }
 
 inline bool LegacyPBRFragmentBase(bool enableFragmentTestCache, bool doTexture, bool enableFog) {
