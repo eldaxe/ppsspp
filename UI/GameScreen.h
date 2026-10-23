@@ -44,12 +44,18 @@ public:
 
 	const char *tag() const override { return "Game"; }
 
+	// The game was deleted or removed from recents, so the screen we return to should refresh.
+	bool GameRemoved() const { return gameRemoved_; }
+
 protected:
+	void BeforeCreateViews() override;
 	void CreateContentViews(UI::ViewGroup *parent) override;
 	void CreateSettingsViews(UI::ViewGroup *parent) override;
 	void CreateContextMenu(UI::ViewGroup *parent) override;
 
 	std::string_view GetTitle() const override;
+	// The progress bar of a pack running in the background.
+	void DrawForeground(UIContext &dc) override;
 
 private:
 	// Event handlers
@@ -69,11 +75,17 @@ private:
 
 	bool isHomebrew_ = false;
 	bool inGame_ = false;
+	bool gameRemoved_ = false;
+	bool finishRequested_ = false;
 
 	// Keep track of progressive loading of metadata.
 	GameInfoFlags knownFlags_ = GameInfoFlags::EMPTY;
 
 	bool knownHasCRC_ = false;
+
+	// GamePacker state the views were made for.
+	int packGeneration_ = 0;
+	bool packBarShown_ = false;
 
 	// A game update installed in PSP/GAME/<DISC_ID>, which is what actually runs when there is one.
 	InstalledGameUpdate installedUpdate_;

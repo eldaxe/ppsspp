@@ -21,6 +21,7 @@
 #include "Common/UI/View.h"
 #include "Common/UI/ViewGroup.h"
 #include "Common/System/OSD.h"
+#include "Common/System/Request.h"
 #include "Common/GPU/OpenGL/GLFeatures.h"
 #include "Common/Data/Text/Parsers.h"
 #include "Common/Data/Encoding/Utf8.h"
@@ -152,17 +153,15 @@ void DeveloperToolsScreen::CreateGeneralTab(UI::LinearLayout *list) {
 	});
 	if (!canUseJit) {
 		core->HideChoice(1);
-		core->HideChoice(3);
 	}
-	// TODO: Enable "JIT using IR" on more architectures. ARM32 needs more testing.
-	// Note also that Loongarch and RISC-V only have a jit-ir backend, and it's used for the JIT option, so the fourth option isn't shown.
-#if !PPSSPP_ARCH(X86) && !PPSSPP_ARCH(AMD64) && !PPSSPP_ARCH(ARM64)
+	// Every native JIT is IR-based, so "JIT using IR" is the same as "JIT".
 	core->HideChoice(3);
-#endif
 
 	// Only the interpreter raises these, but don't hide it behind the CPU core choice - it'd just
 	// look like the setting had vanished.
 	list->Add(new CheckBox(&g_Config.bEnableFPUExceptionTraps, dev->T("Enable FPU exceptions")));
+	// Experimental, so not translated yet.
+	list->Add(new CheckBox(&g_Config.bEmulateMediaEngine, dev->T("Enable ME emulation for homebrew")));
 
 	list->Add(new Choice(dev->T("JIT debug tools")))->OnClick.Handle(this, &DeveloperToolsScreen::OnJitDebugTools);
 	list->Add(new CheckBox(&g_Config.bShowDeveloperMenu, dev->T("Show in-game developer menu")));
@@ -351,8 +350,7 @@ void DeveloperToolsScreen::CreateMIPSTracerTab(UI::LinearLayout *list) {
 		return true;
 	});
 
-	MIPSTracerPath_ = mipsTracer.get_logging_path();
-	MIPSTracerPath = list->Add(new InfoItem(dev->T("Current log file"), MIPSTracerPath_));
+	list->Add(new InfoItem(dev->T("Current log file"), mipsTracer.get_logging_path()));
 
 	PopupSliderChoice* storage_capacity = list->Add(
 		new PopupSliderChoice(
@@ -426,7 +424,8 @@ void DeveloperToolsScreen::CreateUITab(UI::LinearLayout *list) {
 	list->Add(new ItemHeader(si->T("Slider test")));
 	list->Add(new Slider(&testSliderValue_, 0, 100, 1, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT)));
 
-	static const char *positions[] = {"Bottom Left", "Bottom Center", "Bottom Right", "Top Left", "Top Center", "Top Right", "Center Left", "Center Right", "None"};
+	// Same encoding as in GameSettingsScreen: None is -1.
+	static const char *positions[] = { "None", "Bottom Left", "Bottom Center", "Bottom Right", "Top Left", "Top Center", "Top Right", "Center Left", "Center Right" };
 
 	list->Add(new ItemHeader(si->T("Notification tests")));
 	list->Add(new Choice(si->T("Error")))->OnClick.Add([&](UI::EventParams &) {
@@ -477,8 +476,8 @@ void DeveloperToolsScreen::CreateUITab(UI::LinearLayout *list) {
 	});
 
 	list->Add(new ItemHeader(ac->T("Notifications")));
-	list->Add(new PopupMultiChoice(&g_Config.iNotificationPos, sy->T("Notification screen position"), positions, 0, ARRAY_SIZE(positions), I18NCat::DIALOG, screenManager()));
-	list->Add(new PopupMultiChoice(&g_Config.iAchievementsLeaderboardTrackerPos, ac->T("Leaderboard tracker"), positions, 0, ARRAY_SIZE(positions), I18NCat::DIALOG, screenManager()));
+	list->Add(new PopupMultiChoice(&g_Config.iNotificationPos, sy->T("Notification screen position"), positions, -1, ARRAY_SIZE(positions), I18NCat::DIALOG, screenManager()));
+	list->Add(new PopupMultiChoice(&g_Config.iAchievementsLeaderboardTrackerPos, ac->T("Leaderboard tracker"), positions, -1, ARRAY_SIZE(positions), I18NCat::DIALOG, screenManager()));
 
 #ifdef _DEBUG
 	list->Add(new CheckBox(&pretendIngame_, ac->T("Pretend to be in-game (for testing)")));
@@ -525,6 +524,7 @@ void DeveloperToolsScreen::CreateGraphicsTab(UI::LinearLayout *list) {
 	list->Add(new ItemHeader(sy->T("General")));
 	list->Add(new CheckBox(&g_Config.bVendorBugChecksEnabled, dev->T("Enable driver bug workarounds")));
 	list->Add(new CheckBox(&g_Config.bShaderCache, dev->T("Enable shader cache")));
+	list->Add(new CheckBox(&g_Config.bHardwareTransform, gr->T("Hardware Transform")));
 
 	auto displayRefreshRate = list->Add(new PopupSliderChoice(&g_Config.iDisplayRefreshRate, 60, 1000, 60, dev->T("Display refresh rate"), 1, screenManager()));
 	displayRefreshRate->SetFormat(si->T("%d Hz"));
@@ -739,6 +739,8 @@ void DeveloperToolsScreen::OnCopyStatesToRoot(UI::EventParams &e) {
 
 void DeveloperToolsScreen::OnRemoteDebugger(UI::EventParams &e) {
 	if (allowDebugger_) {
+		// Only needed for connecting from another device, but that's the usual case.
+		System_RequestLocalNetworkPermission();
 		StartWebServer(WebServerFlags::DEBUGGER);
 	} else {
 		StopWebServer(WebServerFlags::DEBUGGER);
@@ -768,8 +770,8 @@ void DeveloperToolsScreen::OnMIPSTracerPathChanged(UI::EventParams &e) {
 		BrowseFileType::ANY,
 		[this](std::string_view value, int) {
 			mipsTracer.set_logging_path(std::string(value));
-			MIPSTracerPath_ = value;
-			MIPSTracerPath->SetRightText(MIPSTracerPath_);
+			// The views may have been recreated while the dialog was open, so don't keep a pointer to the path view.
+			RecreateViews();
 		}
 	);
 }

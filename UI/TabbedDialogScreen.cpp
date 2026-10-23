@@ -23,7 +23,7 @@ void UITabbedBaseDialogScreen::AddTab(const char *tag, std::string_view title, I
 	TabDialogFlags dialogFlags = flags_;
 	Path gamePath = gamePath_;
 	std::string cachedTitle(title);
-	tabHolder_->AddTabDeferred(title, imageId, [createCallback = std::move(createCallback), tag, flags, dialogFlags, gamePath, cachedTitle]() -> UI::ViewGroup * {
+	tabHolder_->AddTabDeferred(title, imageId, [this, createCallback = std::move(createCallback), tag, flags, dialogFlags, gamePath, cachedTitle]() -> UI::ViewGroup * {
 		using namespace UI;
 		ViewGroup *scroll = nullptr;
 		if (!(flags & TabFlags::NonScrollable)) {
@@ -38,7 +38,12 @@ void UITabbedBaseDialogScreen::AddTab(const char *tag, std::string_view title, I
 			contents->Add(new PaneTitleBar(gamePath, cachedTitle, ""));
 		}
 
+		// Tabs other than the first are created on demand, outside CreateViews. Their views still belong to the
+		// current tree, so their requests must get the views token, to be forgotten when the tree is deleted.
+		bool wasCreatingViews = IsCreatingViews();
+		SetCreatingViews(true);
 		createCallback(contents);
+		SetCreatingViews(wasCreatingViews);
 		if (scroll) {
 			scroll->Add(contents);
 			return scroll;
@@ -57,6 +62,10 @@ void UITabbedBaseDialogScreen::CreateViews() {
 	// Back button to the bottom left.
 	// Scrolling action menu to the right.
 	using namespace UI;
+
+	// Only created with the search tab, which depends on the orientation, so may not be there this time.
+	clearSearchChoice_ = nullptr;
+	noSearchResults_ = nullptr;
 
 	auto se = GetI18NCategory(I18NCat::SEARCH);
 	filterNotice_ = new TextView("(filter notice, you shouldn't see this text", new LinearLayoutParams(Margins(20, 5)));
@@ -105,11 +114,6 @@ void UITabbedBaseDialogScreen::CreateViews() {
 
 	// Let the subclass create its tabs.
 	CreateTabs();
-	if (currentTabSetting_) {
-		tabHolder_->SetInitialTab(*currentTabSetting_);
-	} else {
-		tabHolder_->EnsureTab(tabHolder_->GetCurrentTab());
-	}
 
 	tabHolder_->OnChangeTab.Add([this](UI::EventParams &e) {
 		if (currentTabSetting_) {
@@ -140,6 +144,13 @@ void UITabbedBaseDialogScreen::CreateViews() {
 				noSearchResults_ = searchSettings->Add(new TextView("", new LinearLayoutParams(Margins(20, 5))));
 			});
 		}
+	}
+
+	// After the search tab, which the saved tab can be.
+	if (currentTabSetting_) {
+		tabHolder_->SetInitialTab(*currentTabSetting_);
+	} else {
+		tabHolder_->EnsureTab(tabHolder_->GetCurrentTab());
 	}
 
 	// Need to handle recreates, both important and accidental ones.
@@ -176,6 +187,10 @@ void UITabbedBaseDialogScreen::SetCurrentTab(int tab) {
 
 void UITabbedBaseDialogScreen::ApplySearchFilter() {
 	using namespace UI;
+	// GAMESETTINGS_SEARCH is broadcast to every screen, including ones whose views don't exist yet.
+	if (!tabHolder_) {
+		return;
+	}
 	auto se = GetI18NCategory(I18NCat::SEARCH);
 
 	EnsureTabs();
@@ -229,7 +244,11 @@ void UITabbedBaseDialogScreen::ApplySearchFilter() {
 		matches = matches || tabMatches;
 	}
 
-	noSearchResults_->SetText(ApplySafeSubstitutions(se->T("No settings matched '%1'"), searchFilter_));
-	noSearchResults_->SetVisibility(matches ? UI::V_GONE : UI::V_VISIBLE);
-	clearSearchChoice_->SetVisibility(searchFilter_.empty() ? UI::V_GONE : UI::V_VISIBLE);
+	if (noSearchResults_) {
+		noSearchResults_->SetText(ApplySafeSubstitutions(se->T("No settings matched '%1'"), searchFilter_));
+		noSearchResults_->SetVisibility(matches ? UI::V_GONE : UI::V_VISIBLE);
+	}
+	if (clearSearchChoice_) {
+		clearSearchChoice_->SetVisibility(searchFilter_.empty() ? UI::V_GONE : UI::V_VISIBLE);
+	}
 }

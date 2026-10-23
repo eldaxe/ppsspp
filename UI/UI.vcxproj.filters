@@ -7,6 +7,9 @@
     <ClCompile Include="EmuScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
+    <ClCompile Include="GamePacker.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
     <ClCompile Include="GameScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
@@ -53,6 +56,7 @@
       <Filter>Screens</Filter>
     </ClCompile>
     <ClCompile Include="BackgroundAudio.cpp" />
+    <ClCompile Include="ShareFiles.cpp" />
     <ClCompile Include="ReportScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
@@ -167,6 +171,9 @@
     <ClInclude Include="EmuScreen.h">
       <Filter>Screens</Filter>
     </ClInclude>
+    <ClInclude Include="GamePacker.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
     <ClInclude Include="GameScreen.h">
       <Filter>Screens</Filter>
     </ClInclude>
@@ -213,6 +220,7 @@
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="BackgroundAudio.h" />
+    <ClInclude Include="ShareFiles.h" />
     <ClInclude Include="ReportScreen.h">
       <Filter>Screens</Filter>
     </ClInclude>

@@ -41,7 +41,7 @@
 #endif
 
 namespace PPSSPP_VK {
-#if !PPSSPP_PLATFORM(IOS_APP_STORE)
+#if !PPSSPP_VK_STATIC
 PFN_vkCreateInstance vkCreateInstance;
 PFN_vkDestroyInstance vkDestroyInstance;
 PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices;
@@ -248,7 +248,7 @@ PFN_vkGetRefreshCycleDurationGOOGLE vkGetRefreshCycleDurationGOOGLE;
 
 using namespace PPSSPP_VK;
 
-#if PPSSPP_PLATFORM(IOS_APP_STORE)
+#if PPSSPP_VK_STATIC
 // Statically linked MoltenVK
 #elif PPSSPP_PLATFORM(SWITCH)
 typedef void *VulkanLibraryHandle;
@@ -336,10 +336,10 @@ static constexpr DriverBlackListEntry g_gpuNameBlacklist[] = {
 #endif
 };
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !PPSSPP_VK_STATIC
 static const char * const so_names[] = {
-#if PPSSPP_PLATFORM(IOS_APP_STORE)
-#elif PPSSPP_PLATFORM(IOS)
+#if PPSSPP_PLATFORM(IOS)
+	// Only reached by the libretro core, the app links MoltenVK statically.
 	"@executable_path/Frameworks/libMoltenVK.dylib",
 	"MoltenVK",
 #elif PPSSPP_PLATFORM(MAC)
@@ -359,7 +359,7 @@ static const char * const so_names[] = {
 };
 #endif
 
-#if !PPSSPP_PLATFORM(IOS_APP_STORE)
+#if !PPSSPP_VK_STATIC
 static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 #if PPSSPP_PLATFORM(SWITCH)
 	// Always unavailable, for now.
@@ -417,7 +417,7 @@ static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 }
 #endif
 
-#if !PPSSPP_PLATFORM(IOS_APP_STORE)
+#if !PPSSPP_VK_STATIC
 static void VulkanFreeLibrary(VulkanLibraryHandle &h) {
 	if (h) {
 #if PPSSPP_PLATFORM(SWITCH)
@@ -444,10 +444,10 @@ void VulkanSetNativeLibDir(std::string_view nativeLibDir) {
 
 bool VulkanMayBeAvailable() {
 #if PPSSPP_PLATFORM(IOS)
+	// The deployment target (15.0) is above anything MoltenVK doesn't support.
 	g_vulkanAvailabilityChecked = true;
-	// MoltenVK does no longer seem to support iOS <= 12, despite what the docs say.
-	g_vulkanMayBeAvailable = System_GetPropertyInt(SYSPROP_SYSTEMVERSION) >= 13;
-	return g_vulkanMayBeAvailable;
+	g_vulkanMayBeAvailable = true;
+	return true;
 #else
 	// Unsupported in VR at the moment
 	if (IsVREnabled()) {
@@ -494,6 +494,7 @@ bool VulkanMayBeAvailable() {
 	std::vector<VkPhysicalDevice> devices;
 	bool anyGood = false;
 	const char *instanceExtensions[10]{};
+	bool portabilityFound = false;
 	VkInstance instance = VK_NULL_HANDLE;
 	VkResult res = VK_SUCCESS;
 	uint32_t physicalDeviceCount = 0;
@@ -544,6 +545,11 @@ bool VulkanMayBeAvailable() {
 			platformSurfaceExtensionFound = true;
 			// Note: Can't stop here - the enumeration order isn't specified anywhere, so VK_KHR_surface
 			// may well come after the platform one, and we need both.
+#if PPSSPP_PLATFORM(MAC)
+		} else if (!strcmp(iter.extensionName, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+			// See VulkanContext::CreateInstance.
+			portabilityFound = true;
+#endif
 		} else if (!strcmp(iter.extensionName, VK_KHR_SURFACE_EXTENSION_NAME)) {
 			instanceExtensions[ci.enabledExtensionCount++] = VK_KHR_SURFACE_EXTENSION_NAME;
 			surfaceExtensionFound = true;
@@ -576,6 +582,10 @@ bool VulkanMayBeAvailable() {
 	info.pEngineName = "VulkanCheckerEngine";
 	ci.pApplicationInfo = &info;
 	ci.flags = 0;
+	if (portabilityFound) {
+		instanceExtensions[ci.enabledExtensionCount++] = VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME;
+		ci.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+	}
 	INFO_LOG(Log::G3D, "VulkanMayBeAvailable: Calling vkCreateInstance");
 	res = localCreateInstance(&ci, nullptr, &instance);
 	if (res != VK_SUCCESS) {
@@ -665,7 +675,7 @@ bail:
 }
 
 bool VulkanLoad(std::string *errorStr) {
-#if PPSSPP_PLATFORM(IOS_APP_STORE)
+#if PPSSPP_VK_STATIC
 	INFO_LOG(Log::G3D, "iOS: Vulkan doesn't need loading");
 	return true;
 #else
@@ -699,7 +709,7 @@ bool VulkanLoad(std::string *errorStr) {
 }
 
 bool VulkanLoadFromGetInstanceProcAddr(VkInstance instance, PFN_vkGetInstanceProcAddr getInstanceProcAddr) {
-#if PPSSPP_PLATFORM(IOS_APP_STORE)
+#if PPSSPP_VK_STATIC
 	// MoltenVK is linked statically, the functions are already there - there are no function pointers to fill in.
 	INFO_LOG(Log::G3D, "iOS: Vulkan doesn't need loading");
 	return true;
@@ -725,7 +735,7 @@ bool VulkanLoadFromGetInstanceProcAddr(VkInstance instance, PFN_vkGetInstancePro
 }
 
 void VulkanLoadInstanceFunctions(VkInstance instance, const VulkanExtensions &enabledExtensions, uint32_t vulkanInstanceApiVersion) {
-#if !PPSSPP_PLATFORM(IOS_APP_STORE)
+#if !PPSSPP_VK_STATIC
 	INFO_LOG(Log::G3D, "Loading Vulkan instance functions. Instance API version: %08x (%d.%d.%d)", vulkanInstanceApiVersion, VK_API_VERSION_MAJOR(vulkanInstanceApiVersion), VK_API_VERSION_MINOR(vulkanInstanceApiVersion), VK_API_VERSION_PATCH(vulkanInstanceApiVersion));
 	// OK, let's use the above functions to get the rest.
 	LOAD_INSTANCE_FUNC(instance, vkDestroyInstance);
@@ -801,7 +811,7 @@ void VulkanLoadInstanceFunctions(VkInstance instance, const VulkanExtensions &en
 // increase performance - but then these function pointers will only work on that specific device. Thus, this loader is not very
 // good for multi-device - not likely we'll ever try that anyway though.
 void VulkanLoadDeviceFunctions(VkDevice device, const VulkanExtensions &enabledExtensions, uint32_t vulkanDeviceApiVersion) {
-#if !PPSSPP_PLATFORM(IOS_APP_STORE)
+#if !PPSSPP_VK_STATIC
 	INFO_LOG(Log::G3D, "Loading Vulkan device functions. Device API version: %08x (%d.%d.%d)", vulkanDeviceApiVersion, VK_API_VERSION_MAJOR(vulkanDeviceApiVersion), VK_API_VERSION_MINOR(vulkanDeviceApiVersion), VK_API_VERSION_PATCH(vulkanDeviceApiVersion));
 
 	LOAD_DEVICE_FUNC(device, vkQueueSubmit);
@@ -946,7 +956,7 @@ void VulkanLoadDeviceFunctions(VkDevice device, const VulkanExtensions &enabledE
 }
 
 void VulkanFree() {
-#if !PPSSPP_PLATFORM(IOS_APP_STORE)
+#if !PPSSPP_VK_STATIC
 	VulkanFreeLibrary(vulkanLibrary);
 #endif
 }

@@ -37,10 +37,11 @@ class DebugInterface;
 class BlockAllocator;
 
 int sceKernelChangeThreadPriority(SceUID threadID, int priority);
-SceUID __KernelCreateThreadInternal(const char *threadName, SceUID moduleID, u32 entry, u32 prio, int stacksize, u32 attr);
+SceUID __KernelCreateThreadInternal(const char *threadName, SceUID moduleID, u32 entry, u32 prio, int stacksize, u32 attr, BlockAllocator *stackAllocator = nullptr);
 // With busyCyclesOut, the cost of filling the stack is left for the caller to take (see
 // __KernelBusyDelayResult) instead of being eaten here.
-int __KernelCreateThread(const char *threadName, SceUID moduleID, u32 entry, u32 prio, int stacksize, u32 attr, u32 optionAddr, bool allowKernel, int *busyCyclesOut = nullptr);
+// stackAllocator picks the partition for the stack; by default it follows the thread's attr.
+int __KernelCreateThread(const char *threadName, SceUID moduleID, u32 entry, u32 prio, int stacksize, u32 attr, u32 optionAddr, bool allowKernel, int *busyCyclesOut = nullptr, BlockAllocator *stackAllocator = nullptr);
 // For a syscall that keeps the CPU busy for a long time. The caller gets the result after the
 // given cycles, but better threads that wake meanwhile run first, and worse ones don't run.
 u32 __KernelBusyDelayResult(u32 result, int cycles, const char *reason);
@@ -67,26 +68,26 @@ u32 sceKernelResumeDispatchThread(u32 suspended);
 int sceKernelGetUserLevel();
 int sceKernelIsUserModeThread();
 int sceKernelWaitThreadEnd(SceUID threadID, u32 timeoutPtr);
-u32 sceKernelReferThreadStatus(u32 uid, u32 statusPtr);
+u32 sceKernelReferThreadStatus(MIPSState *mips, u32 uid, u32 statusPtr);
 u32 sceKernelReferThreadRunStatus(u32 uid, u32 statusPtr);
 int sceKernelReleaseWaitThread(SceUID threadID);
 int sceKernelChangeCurrentThreadAttr(u32 clearAttr, u32 setAttr);
 int sceKernelRotateThreadReadyQueue(int priority);
 int KernelRotateThreadReadyQueue(int priority);
-int sceKernelCheckThreadStack();
+int sceKernelCheckThreadStack(MIPSState *mips);
 int sceKernelSuspendThread(SceUID threadID);
 int sceKernelResumeThread(SceUID threadID);
 int sceKernelWakeupThread(SceUID threadID);
 int sceKernelCancelWakeupThread(SceUID threadID);
 int sceKernelSleepThread();
 int sceKernelSleepThreadCB();
-int sceKernelTerminateDeleteThread(int threadno);
-int sceKernelTerminateThread(SceUID threadID);
+int sceKernelTerminateDeleteThread(MIPSState *mips, int threadno);
+int sceKernelTerminateThread(MIPSState *mips, SceUID threadID);
 int sceKernelWaitThreadEndCB(SceUID threadID, u32 timeoutPtr);
 int sceKernelGetThreadExitStatus(SceUID threadID);
 u32 sceKernelGetThreadmanIdType(u32);
 u32 sceKernelGetThreadmanIdList(u32 type, u32 readBufPtr, u32 readBufSize, u32 idCountPtr);
-u32 sceKernelExtendThreadStack(u32 size, u32 entryAddr, u32 entryParameter);
+u32 sceKernelExtendThreadStack(MIPSState *mips, u32 size, u32 entryAddr, u32 entryParameter);
 void __KernelScheduleWakeup(SceUID threadID, s64 usFromNow);
 
 struct SceKernelSysClock {
@@ -272,7 +273,7 @@ public:
 	static int GetStaticIDType() { return SCE_KERNEL_TMID_Thread; }
 	int GetIDType() const override { return SCE_KERNEL_TMID_Thread; }
 
-	bool AllocateStack(u32 &stackSize);
+	bool AllocateStack(u32 &stackSize, BlockAllocator *allocator = nullptr);
 	bool FillStack();
 	void FreeStack();
 
@@ -351,6 +352,8 @@ KernelObject *__KernelThreadObject();
 KernelObject *__KernelCallbackObject();
 
 SceUID __KernelGetCurThread();
+// Before a load deletes the kernel objects.
+void __KernelForgetCurrentThread();
 int KernelCurThreadPriority();
 bool KernelChangeThreadPriority(SceUID threadID, int priority);
 // Whether the running thread belongs to a kernel module. Privilege on the PSP is a property of
@@ -408,13 +411,13 @@ SceUID __KernelGetCurThread();
 SceUID __KernelGetCurThreadModuleId();
 SceUID __KernelSetupRootThread(SceUID moduleId, int args, const char *argp, int prio, int stacksize, int attr); //represents the real PSP elf loader, run before execution
 void __KernelStartIdleThreads(SceUID moduleId);
-void __KernelReturnFromThread();  // Called as HLE function
+void __KernelReturnFromThread(MIPSState *mips);  // Called as HLE function
 u32 __KernelGetThreadPrio(SceUID id);
 bool __KernelThreadSortPriority(SceUID thread1, SceUID thread2);
 bool __KernelIsDispatchEnabled();
-void __KernelReturnFromExtendStack();
+void __KernelReturnFromExtendStack(MIPSState *mips);
 
-void __KernelIdle();
+void __KernelIdle(MIPSState *mips);
 
 u32 HLEMipsCallReturnAddress();
 u32 __KernelCallbackReturnAddress();
@@ -425,7 +428,7 @@ int sceKernelDeleteCallback(SceUID cbId);
 int sceKernelNotifyCallback(SceUID cbId, int notifyArg);
 int sceKernelCancelCallback(SceUID cbId);
 int sceKernelGetCallbackCount(SceUID cbId);
-void sceKernelCheckCallback();
+void sceKernelCheckCallback(MIPSState *mips);
 int sceKernelReferCallbackStatus(SceUID cbId, u32 statusAddr);
 
 class PSPAction;
@@ -434,7 +437,7 @@ class PSPAction;
 // Takes ownership of afterAction.
 void __KernelDirectMipsCall(u32 entryPoint, PSPAction *afterAction, u32 args[], int numargs, bool reschedAfter);
 
-void __KernelReturnFromMipsCall();  // Called as HLE function
+void __KernelReturnFromMipsCall(MIPSState *mips);  // Called as HLE function
 bool __KernelInCallback();
 
 // Should be called by (nearly) all ...CB functions.

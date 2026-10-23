@@ -456,6 +456,13 @@ void __CtrlDoState(PointerWrap &p)
 	}
 	Do(p, ctrlBuf);
 	Do(p, ctrlBufRead);
+	if (ctrlBuf >= NUM_CTRL_BUFFERS || ctrlBufRead >= NUM_CTRL_BUFFERS) {
+		ERROR_LOG(Log::sceCtrl, "Savestate failure: invalid ctrl buffer index");
+		p.SetError(p.ERROR_FAILURE);
+		ctrlBuf = 0;
+		ctrlBufRead = 0;
+		return;
+	}
 	Do(p, latch);
 	if (s == 1) {
 		dialogBtnMake = 0;
@@ -524,6 +531,12 @@ static int sceCtrlGetSamplingMode(u32 modePtr)
 	if (Memory::IsValidAddress(modePtr))
 		Memory::WriteUnchecked_U32(retVal, modePtr);
 
+	return hleLogDebug(Log::sceCtrl, 0);
+}
+
+// Hides buttons from user mode readers, for kernel code that takes them over (Daedalus, for the
+// system buttons, which games don't get here anyway).
+static int sceCtrlSetButtonIntercept(u32 buttons, int intercept) {
 	return hleLogDebug(Log::sceCtrl, 0);
 }
 
@@ -649,6 +662,15 @@ static const HLEFunction sceCtrl[] =
 	// sceCtrl_driver's NID for sceCtrlPeekBufferPositive in 3.71. Imported by NJEMU's SystemButtons.prx
 	// kernel plugin, which picks it when sceKernelDevkitVersion() is 3.71 or newer (#8925).
 	{0XC4AAD55F, &WrapI_UU<sceCtrlPeekBufferPositive>,     "sceCtrlPeekBufferPositive",        'i', "xx"},
+	// sceCtrl_driver NID for sceCtrlReadBufferPositive (firmware 3.71+, per JPCSP).
+	// Imported by translation-patch loaders like CLANNAD's chfont.prx.
+	{0X454455AC, &WrapI_UU<sceCtrlReadBufferPositive>,     "sceCtrlReadBufferPositive",        'i', "xx"},
+	// Driver only.
+	{0X7CA723DC, &WrapI_UI<sceCtrlSetButtonIntercept>,     "sceCtrlSetButtonIntercept",        'i', "xi"},
+	// sceCtrl_driver NIDs in 3.71-3.73's ctrl.prx (at the same addresses as the user exports), which
+	// LightMP3's support.prx imports.
+	{0X28E71A16, &WrapU_U<sceCtrlSetSamplingMode>,         "sceCtrlSetSamplingMode",           'x', "x" },
+	{0X6D74BF08, &WrapU_U<sceCtrlSetSamplingCycle>,        "sceCtrlSetSamplingCycle",          'x', "x" },
 };
 
 void Register_sceCtrl()

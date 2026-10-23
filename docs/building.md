@@ -106,6 +106,25 @@ by default, but if you want to test-build it locally:
 - Example (POSIX): `cd android && NDK=/path/to/ndk ./ab.sh APP_ABI=arm64-v8a HEADLESS=1`
 - The `ppsspp_headless` executable ends up in `android/libs/<abi>/`.
 
+## tvOS
+
+The tvOS app is the iOS app with the iPhone-only parts compiled out, checked with
+`PPSSPP_PLATFORM(TVOS)` (tvOS also gets `PPSSPP_PLATFORM(IOS)`). The CMake side is the iOS toolchain
+with `-DIOS_PLATFORM=TVOS`, which sets `TVOS`.
+
+- `./b-tvos.sh` builds an unsigned app into `build-tvos-xcode/Release-appletvos/`.
+  `DEVELOPMENT_TEAM=<team> DEVICE=<udid> ./b-tvos.sh` signs it, registers the Apple TV with the team
+  if needed, installs it and launches it with the console attached.
+- To pair an Apple TV, put it on Settings > Remotes and Devices > Remote App and Devices. It doesn't
+  show in `xcrun devicectl list devices` until paired; find it with
+  `dns-sd -B _remotepairing-manual-pairing._tcp` and `xcrun devicectl device info details --device <name>`,
+  then `xcrun devicectl manage pair --device <identifier>` and enter the code it shows.
+- `./b.sh --tvos --libretro` (and `./b.sh --ios --libretro`) build the libretro cores. tvOS has no
+  `sigaltstack`, among other things, so this is the build that catches it.
+- There's no tvOS simulator build: FFmpeg has no tvOS simulator libraries.
+- tvOS apps have no persistent storage except about 500 KB of `NSUserDefaults`. Anything else may be
+  purged, so the memory stick is in Caches for now.
+
 ## libretro core build (Windows)
 
 Canonical instructions are in `libretro/README_WINDOWS.txt` - read that first, this is a summary plus
@@ -210,6 +229,35 @@ binary, or it runs your native build instead. The full suite takes a couple of m
 
 qemu reports LSX and LASX as present, so CI only exercises the LoongArch vector paths.
 The scalar fallbacks never run here, so passing tells you nothing about them.
+
+The 32-bit ARM JIT works the same way with `./b.sh --armhf` (into `build-armhf/`) and `qemu-arm -L
+/usr/arm-linux-gnueabihf`. The cross packages are `gcc-14-arm-linux-gnueabihf g++-14-arm-linux-gnueabihf`, and
+`sudo cmake/scripts/setup-cross.sh armhf` adds the GL and EGL stubs the link needs. Without root, `apt-get download`
+the packages, `dpkg-deb -x` them into one directory, and point `CROSS_ARMHF` at it: the toolchain file then takes
+the sysroot from `$CROSS_ARMHF/usr/arm-linux-gnueabihf`. The binutils need `LD_LIBRARY_PATH` to include
+`$CROSS_ARMHF/usr/lib/x86_64-linux-gnu`, glibc's `libc.so` linker script names absolute paths that have to be
+rewritten to the new root, and the stubs are copied in by hand. For a debugger, run `qemu-arm -g PORT` and attach
+`gdb-multiarch` to it.
+
+`hash/hash` dies with a bus error under qemu-arm on every CPU core, so it's not a JIT problem, but it takes the rest
+of its batch down with it: pass `--known-failures=armhf`.
+
+Without a cross toolchain (on macOS, say) two things still help:
+
+- **A syntax check of the other JITs.** The RISC-V and LoongArch backends (`Core/MIPS/RiscV`,
+  `Core/MIPS/LoongArch64` and their emitters) have no architecture guards, so the host compiler can check
+  them: `clang++ -fsyntax-only` per file, with the `-I`/`-D`/`-std`/`-isystem` flags of any Core file from
+  `compile_commands.json`, plus `-I<repo> -I<repo>/ext -I<repo>/Common` (the database's include paths are
+  relative to the build directory). Check that a copy with a deliberate syntax error does report errors: zsh
+  doesn't word-split a `$FLAGS` variable, which once made a broken check look clean. This proves the code
+  compiles, nothing about its output.
+- **The portable software-renderer paths.** riscv64 and loongarch64 run the software renderer's non-SSE,
+  non-NEON C++ paths, so their test failures reproduce natively: wrap the two NEON defines in the
+  `__aarch64__` block of `ppsspp_config.h` in `#ifndef PPSSPP_TEST_NO_SIMD`, configure a separate
+  `build-nosimd` with `-DHEADLESS=ON` and `-DPPSSPP_TEST_NO_SIMD` in `CMAKE_C_FLAGS` and `CMAKE_CXX_FLAGS`,
+  and build `PPSSPPHeadless` there. Delete it and revert `ppsspp_config.h` afterwards, since `test.py` keeps
+  picking the newest binary. A failure that's the same on both architectures points at the portable path, not
+  the JITs.
 
 ## Quick rebuild on Linux
 

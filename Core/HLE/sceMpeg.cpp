@@ -27,7 +27,6 @@
 #include "Core/HLE/sceKernelModule.h"
 #include "Core/HLE/sceKernelThread.h"
 #include "Core/HLE/sceKernelInterrupt.h"
-#include "Core/Config.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/ErrorCodes.h"
@@ -249,7 +248,9 @@ static MpegContext *getMpegCtx(u32 mpegAddr) {
 	// Take this opportunity to upgrade savestates if necessary.
 	if (res->ringbufferNeedsReverse) {
 		auto ringbuffer = PSPPointer<SceMpegRingBuffer>::Create(res->mpegRingbufferAddr);
-		ringbuffer->packetsAvail = ringbuffer->packets - ringbuffer->packetsAvail;
+		if (ringbuffer.IsValid()) {
+			ringbuffer->packetsAvail = ringbuffer->packets - ringbuffer->packetsAvail;
+		}
 		res->ringbufferNeedsReverse = false;
 	}
 	return res;

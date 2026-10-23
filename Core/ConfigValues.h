@@ -132,6 +132,13 @@ enum class GPUBackend {
 	OPENGL = 0,
 	DIRECT3D11 = 2,
 	VULKAN = 3,
+	METAL = 4,
+};
+
+// What an external display (a TV) shows, where the platform lets us choose. See docs/multi-swapchain.md.
+enum class ExternalDisplayMode {
+	SHOW_GAME = 0,  // The game, with the controls and the menus on the device. Needs Metal or Vulkan.
+	MIRROR = 1,
 };
 
 enum class DepthRasterMode {
@@ -233,12 +240,6 @@ enum class ShowStatusFlags {
 	BATTERY_PERCENT = 1 << 3,
 };
 
-enum class SplineQuality {
-	LOW_QUALITY = 0,
-	MEDIUM_QUALITY = 1,
-	HIGH_QUALITY = 2,
-};
-
 enum class DumpFileType {
 	EBOOT = (1 << 0),
 	PRX = (1 << 1),
@@ -254,7 +255,12 @@ enum TiltTypes {
 	TILT_DPAD,
 	TILT_ACTION_BUTTON,
 	TILT_TRIGGER_BUTTONS,
+	TILT_ANALOG_RIGHT,
 };
+
+inline bool TiltTypeIsAnalog(int type) {
+	return type == TILT_ANALOG || type == TILT_ANALOG_RIGHT;
+}
 
 enum class ScreenEdgePosition {
 	BOTTOM_LEFT = 0,
@@ -282,6 +288,7 @@ enum class DebugOverlay : int {
 	GPU_PROFILE,
 	GPU_ALLOCATOR,
 	FRAMEBUFFER_LIST,
+	JIT_STATS,
 };
 
 // Android-only for now
@@ -301,4 +308,10 @@ enum class SkipGPUReadbackMode : int {
 enum class RemoteISOShareType : int {
 	RECENT,
 	LOCAL_FOLDER,
+};
+
+enum class GameBrowserViewMode : int {
+	GRID = 0,
+	LIST = 1,
+	LARGE_LIST = 2,  // XMB-style, with full size icons and the ICON1.PMF video.
 };

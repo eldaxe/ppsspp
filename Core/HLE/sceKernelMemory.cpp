@@ -102,6 +102,7 @@ void FPL::DoState(PointerWrap &p) {
 		return;
 
 	Do(p, nf);
+	TerminateLoadedCString(p, nf.name);
 	if (p.mode == p.MODE_READ) {
 		if (nf.numBlocks < 0 || !p.CheckRead(nf.numBlocks)) {
 			p.SetError(p.ERROR_FAILURE);
@@ -116,6 +117,10 @@ void FPL::DoState(PointerWrap &p) {
 	FplWaitingThread dv = { 0 };
 	Do(p, waitingThreads, dv);
 	Do(p, pausedWaits);
+	// It's taken modulo the block count, but a negative one stays negative.
+	if (p.mode == p.MODE_READ && nextBlock < 0) {
+		p.SetError(p.ERROR_FAILURE);
+	}
 }
 
 void SceKernelVplHeader::Init(u32 ptr, u32 size) {
@@ -293,6 +298,7 @@ void VPL::DoState(PointerWrap &p) {
 	}
 
 	Do(p, nv);
+	TerminateLoadedCString(p, nv.name);
 	Do(p, address);
 	VplWaitingThread dv = { 0 };
 	Do(p, waitingThreads, dv);
@@ -828,11 +834,18 @@ public:
 			return;
 
 		Do(p, address);
-		DoArray(p, name, sizeof(name));
+		DoCString(p, name);
 		if (s >= 2) {
 			int allocType = BlockAllocatorToID(alloc);
 			Do(p, allocType);
-			alloc = BlockAllocatorFromID(allocType);
+			// From BlockAllocatorToID, so not a game's partition id: map it back without
+			// BlockAllocatorFromID's privilege check, which asks about whatever thread is current.
+			switch (allocType) {
+			case KERNEL_PARTITION_ID: alloc = &kernelMemory; break;
+			case USER_PARTITION_ID: alloc = &userMemory; break;
+			case VSHELL_PARTITION_ID: alloc = &volatileMemory; break;
+			default: alloc = nullptr; break;
+			}
 		}
 	}
 
@@ -908,7 +921,7 @@ u32 sceKernelGetBlockHeadAddr(SceUID id) {
 	}
 }
 
-static int sceKernelPrintf(const char *formatString) {
+static int sceKernelPrintf(MIPSState *mips, const char *formatString) {
 	if (!formatString)
 		return -1;
 
@@ -1688,6 +1701,7 @@ struct TLSPL : public KernelObject {
 			return;
 
 		Do(p, ntls);
+		TerminateLoadedCString(p, ntls.name);
 		Do(p, address);
 		if (s >= 2)
 			Do(p, alignment);
@@ -1696,6 +1710,11 @@ struct TLSPL : public KernelObject {
 		Do(p, waitingThreads);
 		Do(p, next);
 		Do(p, usage);
+		// Both index arrays.
+		if (p.mode == p.MODE_READ && (ntls.index < 0 || ntls.index >= TLSPL_NUM_INDEXES || usage.size() != (size_t)ntls.totalBlocks)) {
+			ERROR_LOG(Log::SaveState, "TLSPL: bad index %d or block count %d (%d used) in savestate", ntls.index, ntls.totalBlocks, (int)usage.size());
+			p.SetError(p.ERROR_FAILURE);
+		}
 	}
 
 	NativeTlspl ntls;

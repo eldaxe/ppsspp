@@ -16,6 +16,11 @@ namespace UI {
 class AnchorTranslateTween;
 class ScrollView;
 
+// For the arrow directions: whether candidate is a better place to move the focus to from origin
+// than best (null if there's nothing yet). originPos is where the move starts across the
+// direction of the move, normally origin's center.
+bool IsBetterFocusCandidate(const Bounds &origin, const Point2D &originPos, const Bounds &candidate, const Bounds *best, FocusMove direction);
+
 struct NeighborResult {
 	NeighborResult() : view(nullptr), score(0) {}
 	NeighborResult(View *v, float s) : view(v), score(s) {}
@@ -48,11 +53,13 @@ public:
 	template <class T>
 	T *Add(T *view) {
 		views_.push_back(view);
+		SetParentOf(view);
 		return view;
 	}
 	template <class T>
 	T *Insert(int index, T *view) {
 		views_.insert(views_.begin() + index, view);
+		SetParentOf(view);
 		return view;
 	}
 
@@ -102,6 +109,9 @@ public:
 protected:
 	std::string DescribeListUnordered(std::string_view heading) const;
 	std::string DescribeListOrdered(std::string_view heading) const;
+
+	// Anything that adds to views_ without Add or Insert must call this.
+	void SetParentOf(View *view) { view->parent_ = this; }
 
 	std::vector<View *> views_;
 	View *defaultFocusView_ = nullptr;

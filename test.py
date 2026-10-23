@@ -85,17 +85,27 @@ class Command(object):
 # These have worked and should keep working always - regression tests.
 # -g flag runs these.
 tests_good = [
+  "cpu/cop0/eret",
   "cpu/cpu_alu/cpu_alu",
   "cpu/cpu_alu/cpu_branch",
+  "cpu/cpu_alu/branch_link_ra",
   "cpu/cpu_alu/cpu_branch2",
   "cpu/cpu_alu/cpu_div",
+  "cpu/cpu_alu/shift_encodings",
+  "cpu/cpu_alu/allegrex_encodings",
+  "cpu/jump/unaligned",
   "cpu/vfpu/callout",
   "cpu/vfpu/colors",
   "cpu/vfpu/convert",
   "cpu/vfpu/convert_scaled",
   "cpu/vfpu/minmax",
+  "cpu/vfpu/minmax_zero",
+  "cpu/vfpu/minmax_tie",
   "cpu/vfpu/prefix_branch",
   "cpu/vfpu/prefix_ctrl",
+  "cpu/vfpu/prefix_lanes",
+  "cpu/vfpu/prefix_load",
+  "cpu/vfpu/vfim",
   "cpu/vfpu/vbranch",
   "cpu/vfpu/vrnd",
   "cpu/vfpu/overlap",
@@ -130,8 +140,11 @@ tests_good = [
   "audio/atrac/setdata",
   "audio/atrac/sas",
   "audio/atrac/c0mono",
+  "audio/atrac/headerfields",
   "audio/audiocodec/basic",
   "audio/audiocodec/at3param",
+  "audio/audiocodec/at3errors",
+  "audio/audiocodec/context",
   "audio/mp3/checkneeded",
   "audio/mp3/getbitrate",
   "audio/mp3/getchannel",
@@ -177,6 +190,7 @@ tests_good = [
   "audio/sascore/pcm",
   "audio/sascore/pitch",
   "audio/sascore/vag",
+  "ccc/convertstring",
   "ctrl/ctrl",
   "ctrl/idle/idle",
   "ctrl/sampling/sampling",
@@ -205,7 +219,10 @@ tests_good = [
   "gpu/bounding/vertexaddr",
   "gpu/bounding/viewport",
   "gpu/callbacks/ge_callbacks",
+  "gpu/callstack/depth",
+  "gpu/clipping/guardband",
   "gpu/clipping/homogeneous",
+  "gpu/clipping/xycull",
   "gpu/clut/address",
   "gpu/clut/masks",
   "gpu/clut/offset",
@@ -216,35 +233,63 @@ tests_good = [
   "gpu/commands/blocktransfer",
   "gpu/commands/cull",
   "gpu/commands/fog",
+  "gpu/commands/light",
   "gpu/commands/material",
   "gpu/complex/complex",
+  "gpu/depth/precision",
+  "gpu/depth/transformprecision",
   "gpu/displaylist/alignment",
   "gpu/dither/dither",
+  "gpu/exact/coverage",
+  "gpu/exact/curves",
+  "gpu/exact/lighting",
+  "gpu/exact/lines",
+  "gpu/exact/nearclip",
+  "gpu/exact/pixel",
+  "gpu/exact/planes",
+  "gpu/exact/texture",
+  "gpu/exact/transform",
+  "gpu/filtering/linear",
   "gpu/filtering/mipmaplinear",
+  "gpu/filtering/nearest",
+  "gpu/filtering/precisionlinear2d",
+  "gpu/filtering/precisionlinear3d",
+  "gpu/filtering/precisionnearest2d",
+  "gpu/filtering/precisionnearest3d",
   "gpu/ge/break",
   "gpu/ge/breakwait",
   "gpu/ge/callbackstate",
   "gpu/ge/context",
   "gpu/ge/edram",
   "gpu/ge/enqueueparam",
+  "gpu/ge/get",
   "gpu/ge/intrsuspend",
   "gpu/ge/queue",
   "gpu/ge/queue2",
   "gpu/lighting/shademap",
   "gpu/lighting/specular",
+  "gpu/primitives/bezier",
+  "gpu/primitives/continue",
+  "gpu/primitives/immediate",
   "gpu/primitives/indices",
   "gpu/primitives/invalidprim",
+  "gpu/primitives/lines",
+  "gpu/primitives/linestrip",
   "gpu/primitives/points",
   "gpu/primitives/rectangles",
+  "gpu/primitives/spline",
   "gpu/primitives/trianglefan",
   "gpu/primitives/trianglestrip",
   "gpu/primitives/triangles",
+  "gpu/reflection/reflection",
   "gpu/rendertarget/copy",
   "gpu/rendertarget/depal",
+  "gpu/rendertarget/rendertarget",
   "gpu/signals/pause",
   "gpu/signals/pause2",
   "gpu/signals/suspend",
   "gpu/signals/sync",
+  "gpu/stencil/writemask",
   "gpu/texcolors/dxt1",
   "gpu/texcolors/dxt3",
   "gpu/texcolors/dxt5",
@@ -256,11 +301,19 @@ tests_good = [
   "gpu/texfunc/decal",
   "gpu/texfunc/modulate",
   "gpu/texfunc/replace",
+  "gpu/texmtx/normals",
+  "gpu/texmtx/prims",
+  "gpu/texmtx/source",
+  "gpu/texmtx/uvs",
+  "gpu/textures/mipinvalid",
   "gpu/textures/mipmap",
   "gpu/textures/rotate",
+  "gpu/textures/size",
   "gpu/transfer/invalid",
   "gpu/transfer/mirrors",
   "gpu/transfer/overlap",
+  "gpu/triangle/triangle",
+  "gpu/vertices/carry",
   "gpu/vertices/colors",
   "gpu/vertices/morph",
   # "gpu/vertices/texcoords",  #  See issue #19093
@@ -270,6 +323,7 @@ tests_good = [
   "hash/sha1ctx",
   "hle/check_not_used_uids",
   "intr/intr",
+  "intr/kernel/intrhandler",
   "intr/mfic",
   "intr/enablesub",
   "intr/registersub",
@@ -291,6 +345,10 @@ tests_good = [
   "malloc/malloc",
   "misc/dcache",
   "misc/deadbeef",
+  "modules/cutrel/cutrel",
+  "modules/cutrel/kernel/cutrel",
+  "modules/loadrace/loadrace",
+  "modules/startoptions/startoptions",
   "modules/unresolved/unresolved",
   "misc/libc",
   "misc/sdkver",
@@ -318,6 +376,7 @@ tests_good = [
   "sysmem/volatile",
   "threads/alarm/alarm",
   "threads/alarm/cancel/cancel",
+  "threads/alarm/pending/pending",
   "threads/alarm/refer/refer",
   "threads/alarm/set/set",
   "threads/callbacks/afterwait",
@@ -431,6 +490,8 @@ tests_good = [
   "threads/tls/create",
   "threads/tls/partition",
   "threads/tls/kernel/partition",
+  "threads/threads/kernel/priority",
+  "gpu/ge/kernel/edramsize",
   "threads/tls/delete",
   "threads/tls/get",
   "threads/tls/free",
@@ -455,6 +516,7 @@ tests_good = [
   "threads/vtimers/getbase",
   "threads/vtimers/gettime",
   "threads/vtimers/interrupt",
+  "threads/vtimers/pending/pending",
   "threads/vtimers/refer",
   "threads/vtimers/sethandler",
   "threads/vtimers/settime",
@@ -469,9 +531,12 @@ tests_good = [
   "utility/msgdialog/abort",
   "utility/savedata/autosave",
   "utility/savedata/shutdownstatus",
+  "utility/savedata/noupdate",
+  "utility/savedata/initstatus",
   "utility/savedata/filelist",
   "utility/savedata/getsize",
   "utility/savedata/makedata",
+  "utility/savedata/nomemstick",
   "utility/systemparam/systemparam",
   "umd/api/api",
   "umd/callbacks/umd",
@@ -517,6 +582,11 @@ known_failures = {
   "loongarch64": [
     "cpu/fpu/fpu",
   ],
+  "armhf": [
+    # A bus error under qemu-arm, which doesn't fix up unaligned accesses the way the kernel does.
+    # Happens on every CPU core, so it's in the hashing code, not the JIT.
+    "hash/hash",
+  ],
 }
 
 tests_next = [
@@ -526,8 +596,6 @@ tests_next = [
   "cpu/vfpu/prefix_sat",
   "cpu/vfpu/prefix_unpack",  # an invalid swizzle replays an earlier prefixed value, not emulated
   "cpu/vfpu/vbranch_hazard",  # VFPU pipeline latencies, which a compiler pads for; not emulated
-  "cpu/vfpu/minmax_tie",  # vmin/vmax return the second operand on a -0/+0 tie; the IR path returns the first
-  "cpu/vfpu/minmax_zero",  # signed zero and denormals in vmin/vmax
   "cpu/vfpu/specials",  # vcmp on denormals, NaN canonicalization and denormal flush in vbfy/vocp/vavg/vfad/vsocp
   "cpu/vfpu/overlap_vcrsp",  # vcrsp overlapping its source, which the assembler refuses; the hardware doesn't read-before-write
   "cpu/fpu/fpu_branch_hazard",  # a bc1x right after c.xx.s sees the old condition; the compiler pads for it, not emulated
@@ -536,12 +604,16 @@ tests_next = [
   "cpu/vfpu/prefixes",
   "cpu/vfpu/vector",
   "cpu/vfpu/vregs",
+  "cpu/fpu/denormal",  # see docs/cpu-equivalence.md for these five
+  "cpu/vfpu/fcr31",
+  "cpu/vfpu/signed_zero",
+  "cpu/vfpu/nan_gen",
+  "cpu/vfpu/undefined",
   "audio/sceaudio/output",
   "audio/sascore/setadsr",
   "audio/mp3/init",
   "audio/output2/frequency",
   "audio/output2/rest",
-  "ccc/convertstring",
   "font/fonttest",
   "font/charinfo",
   "font/newlib",
@@ -551,40 +623,18 @@ tests_next = [
   "font/shadowglyphimage",
   "font/shadowglyphimageclip",
   "font/shadowinfo",
-  "gpu/clipping/guardband",
-  "gpu/commands/light",
-  "gpu/depth/precision",
   "gpu/displaylist/state",
-  "gpu/filtering/linear",
-  "gpu/filtering/nearest",
-  "gpu/filtering/precisionlinear2d",
-  "gpu/filtering/precisionlinear3d",
-  "gpu/filtering/precisionnearest2d",
-  "gpu/filtering/precisionnearest3d",
   "gpu/ge/edramswizzle",
-  "gpu/ge/get",
-  "gpu/primitives/bezier",
-  "gpu/primitives/continue",
-  "gpu/primitives/immediate",
   "gpu/primitives/indices32",
-  "gpu/primitives/lines",
-  "gpu/primitives/linestrip",
-  "gpu/primitives/spline",
-  "gpu/reflection/reflection",
-  "gpu/rendertarget/rendertarget",
   "gpu/signals/continue",
   # Old SDK: a stall update from inside a SUSPEND handler is remembered, but not applied to the GE. See docs/sceGe.md.
   "gpu/signals/handlercalls",
   "gpu/signals/jumps",
   "gpu/signals/simple",
   "gpu/simple/simple",
-  "gpu/texmtx/normals",
-  "gpu/texmtx/prims",
-  "gpu/texmtx/source",
-  "gpu/texmtx/uvs",
-  "gpu/textures/size",
-  "gpu/triangle/triangle",
   "intr/waits",
+  "me/audiofifo",  # needs the Media Engine on, and Sony's ME firmware installed
+  "me/vram",  # needs the Media Engine on, and Sony's ME firmware installed
   "sysmem/kernel/heapgrow",
   "io/file/file",
   "io/io/io",
@@ -601,7 +651,9 @@ tests_next = [
   # Doesn't work on a PSP for security reasons, hangs in PPSSPP currently.
   # Commented out to make tests run much faster.
   #"modules/loadexec/loader",
+  "modules/unloadfill/unloadfill",
   "net/http/http",
+  "net/inet/bind",
   "net/primary/ether",
   "sysmem/partition",
   # These two mbx tests only appeared to work because they papered over bugs 
@@ -624,7 +676,10 @@ tests_next = [
   #"utility/savedata/saveemptyfilename",
   "utility/savedata/secureversion",
   "utility/savedata/sizes",
+  "video/mp4/avchold",  # needs Sony's mp4 and mpeg modules: --disable-hle=0x110, see docs/pspautotests.md
   "video/mpeg/basic",
+  "video/mpeg/decodeend",  # needs Sony's mpeg module, as avchold
+  "video/mpeg/deletetiming",
   "video/pmf/pmf",
   "video/pmf_simple/pmf_simple",
   "video/psmfplayer/basic",
@@ -636,6 +691,13 @@ tests_next = [
   "video/psmfplayer/start",
   "video/psmfplayer/update",
 ]
+
+
+# Tests that need extra headless flags, so they run in a headless process of their own. The flags
+# have to match how the .expected was recorded.
+test_flags = {
+  "utility/savedata/nomemstick": ["--no-memstick"],
+}
 
 
 # These are the tests we ignore (not important, or impossible to run)
@@ -675,12 +737,9 @@ def init():
 def cpu_backend(args):
   # Which backend headless will end up on, given the args we hand through to it. Headless defaults
   # to the JIT, and a later flag overrides an earlier one, like its own parsing in Core/CmdLine.cpp.
-  short_flags = {'-i': 'interpreter', '-r': 'ir', '-j': 'jit', '-J': 'jit-ir'}
   backend = 'jit'
   for arg in args:
-    if arg in short_flags:
-      backend = short_flags[arg]
-    elif arg.startswith('--cpu='):
+    if arg.startswith('--cpu='):
       backend = arg[len('--cpu='):]
   return backend
 
@@ -706,6 +765,9 @@ def run_tests(test_list, args):
     # TODO: Maybe --compare should detect --graphics?
     cmdline = [PPSSPP_EXE, '--root', TEST_ROOT + '../', '--compare', '--timeout-wall=' + str(timeout), '@-']
     cmdline.extend([i for i in args if i not in ['-g', '-m', '-b']])
+    # A memory stick of the tests' own, so they neither write into the user's nor see its firmware.
+    if not any(i.startswith('--memstick') for i in cmdline):
+      cmdline.append('--memstick=' + os.path.join(os.path.dirname(os.path.abspath(PPSSPP_EXE)), 'memstick'))
 
     c = Command(cmdline, '\n'.join(test_filenames))
     returncode = c.run(timeout * len(test_filenames))
@@ -755,7 +817,11 @@ def main():
     if skipped:
       print("Skipping %d known failures on %s: %s" % (len(skipped), skip_arch, ", ".join(skipped)))
 
-  returncode = run_tests(tests, args)
+  plain = [t for t in tests if t not in test_flags]
+  returncode = run_tests(plain, args)
+  for test in tests:
+    if test in test_flags:
+      returncode = run_tests([test], args + test_flags[test]) or returncode
   if teamcity:
     return 0
   return returncode

@@ -68,7 +68,6 @@
 #include "UI/AdhocServerScreen.h"
 
 #include "Common/File/FileUtil.h"
-#include "Common/File/AndroidContentURI.h"
 #include "Common/StringUtils.h"
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"
@@ -125,9 +124,13 @@ GameSettingsScreen::GameSettingsScreen(const Path &gamePath, std::string gameID,
 		g_Config.LoadGameConfig(gameID_);
 	}
 
-	iAlternateSpeedPercent1_ = g_Config.iFpsLimit1 < 0 ? -1 : (g_Config.iFpsLimit1 * 100) / 60;
-	iAlternateSpeedPercent2_ = g_Config.iFpsLimit2 < 0 ? -1 : (g_Config.iFpsLimit2 * 100) / 60;
-	iAlternateSpeedPercentAnalog_ = (g_Config.iAnalogFpsLimit * 100) / 60;
+	ReadConfigTemporaries();
+}
+
+// Also called after restoring defaults, so the old values aren't written back over them.
+void GameSettingsScreen::ReadConfigTemporaries() {
+	// Written back on exit, so it must be read even if the System tab is never opened.
+	enableReports_ = Reporting::IsEnabled();
 }
 
 GameSettingsScreen::~GameSettingsScreen() {
@@ -160,11 +163,13 @@ GameSettingsScreen::~GameSettingsScreen() {
 void GameSettingsScreen::PreCreateViews() {
 	ReloadAllPostShaderInfo(screenManager()->getDrawContext());
 	ReloadAllThemeInfo();
+#if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
+	CheckMemstickInstallState();
+#endif
 }
 
 static bool UsingHardwareTextureScaling() {
-	// For now, Vulkan only.
-	return g_Config.bTexHardwareScaling && GetGPUBackend() == GPUBackend::VULKAN && !g_Config.bSoftwareRendering;
+	return g_Config.bTexHardwareScaling && (GetGPUBackend() == GPUBackend::VULKAN || GetGPUBackend() == GPUBackend::METAL) && !g_Config.bSoftwareRendering;
 }
 
 static std::string TextureTranslateName(std::string_view value) {
@@ -189,30 +194,50 @@ static std::string *GPUDeviceNameSetting() {
 	return nullptr;
 }
 
-static bool PathToVisualUsbPath(Path path, std::string &outPath) {
-	switch (path.Type()) {
-	case PathType::NATIVE:
-		if (path.StartsWith(g_Config.memStickDirectory)) {
-			return g_Config.memStickDirectory.ComputePathTo(path, outPath);
+#if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
+// Works out where the memstick is (installed.txt next to the exe means My Documents or a custom
+// folder), and which of the two checkboxes can be changed.
+void GameSettingsScreen::CheckMemstickInstallState() {
+	const Path &PPSSPPpath = File::GetExeDirectory();
+	const Path installedFile = PPSSPPpath / "installed.txt";
+	const bool myDocsExists = W32Util::UserDocumentsPath().size() != 0;
+
+	installed_ = File::Exists(installedFile);
+	otherinstalled_ = false;
+	memstickMyDocEnabled_ = !PSP_IsInited();
+	memstickOtherEnabled_ = false;
+	if (!installed_ && myDocsExists) {
+		// Disable the setting if we can't create & delete a file next to the exe.
+		if (File::CreateEmptyFile(PPSSPPpath / "installedTEMP.txt")) {
+			if (!(File::Delete(PPSSPPpath / "installedTEMP.txt")))
+				memstickMyDocEnabled_ = false;
+			else
+				memstickOtherEnabled_ = !PSP_IsInited();
+		} else
+			memstickMyDocEnabled_ = false;
+	} else {
+		if (installed_ && myDocsExists) {
+			FILE *testInstalled = File::OpenCFile(installedFile, "rt");
+			if (testInstalled) {
+				char temp[2048];
+				char *tempStr = fgets(temp, sizeof(temp), testInstalled);
+				// Skip UTF-8 encoding bytes if there are any. There are 3 of them.
+				if (tempStr && strncmp(tempStr, "\xEF\xBB\xBF", 3) == 0) {
+					tempStr += 3;
+				}
+				memstickOtherEnabled_ = !PSP_IsInited();
+				if (tempStr && strlen(tempStr) != 0 && strcmp(tempStr, "\n") != 0) {
+					installed_ = false;
+					otherinstalled_ = true;
+				}
+				fclose(testInstalled);
+			}
+		} else if (!myDocsExists) {
+			memstickMyDocEnabled_ = false;
 		}
-		break;
-	case PathType::CONTENT_URI:
-#if PPSSPP_PLATFORM(ANDROID)
-	{
-		// Try to parse something sensible out of the content URI.
-		AndroidContentURI uri(path.ToString());
-		outPath = uri.RootPath();
-		if (startsWith(outPath, "primary:")) {
-			outPath = "/" + outPath.substr(8);
-		}
-		return true;
 	}
-#endif
-	default:
-		break;
-	}
-	return false;
 }
+#endif
 
 void GameSettingsScreen::CreateTabs() {
 	using namespace UI;
@@ -279,7 +304,7 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	Draw::DrawContext *draw = screenManager()->getDrawContext();
 
 #if !PPSSPP_PLATFORM(UWP)
-	static const char *renderingBackend[] = { "OpenGL", "Direct3D 9", "Direct3D 11", "Vulkan" };
+	static const char *renderingBackend[] = { "OpenGL", "Direct3D 9", "Direct3D 11", "Vulkan", "Metal" };
 	PopupMultiChoice *renderingBackendChoice = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iGPUBackend, gr->T("Backend"), renderingBackend, (int)GPUBackend::OPENGL, ARRAY_SIZE(renderingBackend), I18NCat::GRAPHICS, screenManager()));
 	renderingBackendChoice->SetPreOpenCallback([this](UI::PopupMultiChoice *choice) {
 		// Don't filter until the last possible moment, since it involves trying to initialize Vulkan, if we were
@@ -293,12 +318,29 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 			choice->HideChoice((int)GPUBackend::DIRECT3D11);
 		if (!g_Config.IsBackendEnabled(GPUBackend::VULKAN))
 			choice->HideChoice((int)GPUBackend::VULKAN);
+		if (!g_Config.IsBackendEnabled(GPUBackend::METAL))
+			choice->HideChoice((int)GPUBackend::METAL);
 	});
 
 	if (!IsFirstInstance()) {
 		// If we're not the first instance, can't save the setting, and it requires a restart, so...
 		renderingBackendChoice->SetEnabled(false);
 	}
+#endif
+
+#if (PPSSPP_PLATFORM(IOS) && !PPSSPP_PLATFORM(TVOS)) || PPSSPP_PLATFORM(ANDROID)
+	// Showing the game there needs a second swapchain. Otherwise the system mirrors the screen.
+	static const char *externalDisplayModes[] = { "Show the game", "Mirror the screen" };
+	PopupMultiChoice *externalDisplayChoice = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iExternalDisplay, gr->T("External display"), externalDisplayModes, 0, ARRAY_SIZE(externalDisplayModes), I18NCat::GRAPHICS, screenManager()));
+	externalDisplayChoice->SetEnabled(draw->GetDeviceCaps().multipleSwapchains);
+	// Picking the current value again would rebuild the TV's output for nothing (iOS starts over on a change).
+	externalDisplayChoice->OnChoice.Add([previous = g_Config.iExternalDisplay](UI::EventParams &e) mutable {
+		if (g_Config.iExternalDisplay == previous) {
+			return;
+		}
+		previous = g_Config.iExternalDisplay;
+		System_Notify(SystemNotification::EXTERNAL_DISPLAY_CHANGED);
+	});
 #endif
 
 	// Backends that don't allow a device choice will only expose one device.
@@ -354,8 +396,6 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 				msaaChoice->SetChoiceIcon(i, ImageID("I_WARNING"));
 			}
 		}
-	} else {
-		g_Config.iMultiSampleLevel = 0;
 	}
 
 #if PPSSPP_PLATFORM(ANDROID)
@@ -438,7 +478,25 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	}
 
 	graphicsSettings->Add(new ItemHeader(gr->T("Frame Rate Control")));
-	static const char *frameSkip[] = {"Off", "1", "2", "3", "4", "5", "6", "7", "8"};
+
+	PopupSliderChoice *altSpeed1 = graphicsSettings->Add(new PopupSliderChoice(&g_Config.iAltSpeedPercent1, 0, 1000, UI::NO_DEFAULT_INT, gr->T("Alternative Speed", "Alternative speed"), 5, screenManager(), gr->T("%, 0:unlimited")));
+	altSpeed1->SetFormat("%i%%");
+	altSpeed1->SetZeroLabel(gr->T("Unlimited"));
+	altSpeed1->SetNegativeDisable(gr->T("Disabled"));
+
+	PopupSliderChoice *altSpeed2 = graphicsSettings->Add(new PopupSliderChoice(&g_Config.iAltSpeedPercent2, 0, 1000, UI::NO_DEFAULT_INT, gr->T("Alternative Speed 2", "Alternative speed 2 (in %, 0 = unlimited)"), 5, screenManager(), gr->T("%, 0:unlimited")));
+	altSpeed2->SetFormat("%i%%");
+	altSpeed2->SetZeroLabel(gr->T("Unlimited"));
+	altSpeed2->SetNegativeDisable(gr->T("Disabled"));
+
+	if (analogSpeedMapped_) {
+		PopupSliderChoice *analogSpeed = graphicsSettings->Add(new PopupSliderChoice(&g_Config.iAnalogAltSpeedPercent, 1, 1000, UI::NO_DEFAULT_INT, gr->T("Analog alternative speed", "Analog alternative speed (in %)"), 5, screenManager(), "%"));
+		analogSpeed->SetFormat("%i%%");
+	}
+
+	graphicsSettings->Add(new ItemHeader(gr->T("Speed Hacks", "Speed Hacks (can cause rendering errors!)")));
+
+	static const char *frameSkip[] = {"Off", "1", "2", "3", "4"};
 	PopupMultiChoice *frameSkipping = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iFrameSkip, gr->T("Frame Skipping"), frameSkip, 0, ARRAY_SIZE(frameSkip), I18NCat::GRAPHICS, screenManager()));
 	frameSkipping->SetChoicesUntranslated(1, (int)ARRAY_SIZE(frameSkip) - 1);
 	frameSkipping->SetEnabledFunc([] {
@@ -449,23 +507,6 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	frameSkipAuto->OnClick.Add([](UI::EventParams &e) {
 		g_Config.UpdateAfterSettingAutoFrameSkip();
 	});
-
-	PopupSliderChoice *altSpeed1 = graphicsSettings->Add(new PopupSliderChoice(&iAlternateSpeedPercent1_, 0, 1000, UI::NO_DEFAULT_INT, gr->T("Alternative Speed", "Alternative speed"), 5, screenManager(), gr->T("%, 0:unlimited")));
-	altSpeed1->SetFormat("%i%%");
-	altSpeed1->SetZeroLabel(gr->T("Unlimited"));
-	altSpeed1->SetNegativeDisable(gr->T("Disabled"));
-
-	PopupSliderChoice *altSpeed2 = graphicsSettings->Add(new PopupSliderChoice(&iAlternateSpeedPercent2_, 0, 1000, UI::NO_DEFAULT_INT, gr->T("Alternative Speed 2", "Alternative speed 2 (in %, 0 = unlimited)"), 5, screenManager(), gr->T("%, 0:unlimited")));
-	altSpeed2->SetFormat("%i%%");
-	altSpeed2->SetZeroLabel(gr->T("Unlimited"));
-	altSpeed2->SetNegativeDisable(gr->T("Disabled"));
-
-	if (analogSpeedMapped_) {
-		PopupSliderChoice *analogSpeed = graphicsSettings->Add(new PopupSliderChoice(&iAlternateSpeedPercentAnalog_, 1, 1000, UI::NO_DEFAULT_INT, gr->T("Analog alternative speed", "Analog alternative speed (in %)"), 5, screenManager(), "%"));
-		altSpeed2->SetFormat("%i%%");
-	}
-
-	graphicsSettings->Add(new ItemHeader(gr->T("Speed Hacks", "Speed Hacks (can cause rendering errors!)")));
 
 	CheckBox *skipBufferEffects = graphicsSettings->Add(new CheckBox(&g_Config.bSkipBufferEffects, gr->T("Skip Buffer Effects")));
 	graphicsSettings->Add(new SettingHint(gr->T("RenderingMode NonBuffered Tip", "Faster, but graphics may be missing in some games"), skipBufferEffects));
@@ -494,11 +535,6 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	if (g_Config.iDepthRasterMode != 3)
 		depthRasterMode->HideChoice(3);
 
-	static const char *quality[] = { "Low", "Medium", "High" };
-	PopupMultiChoice *bezierQuality = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iSplineBezierQuality, gr->T("LowCurves", "Spline/Bezier curves quality"), quality, 0, ARRAY_SIZE(quality), I18NCat::GRAPHICS, screenManager()));
-	bezierQuality->SetDefault(2);
-	graphicsSettings->Add(new SettingHint(gr->T("LowCurves Tip", "Only used by some games, controls smoothness of curves"), bezierQuality));
-
 	static const char *bloomHackOptions[] = {"Off", "Safe", "Balanced", "Aggressive"};
 	PopupMultiChoice *bloomHack = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iBloomHack, gr->T("Lower resolution for effects"), bloomHackOptions, 0, ARRAY_SIZE(bloomHackOptions), I18NCat::GRAPHICS, screenManager()));
 	bloomHack->SetEnabledFunc([] {
@@ -520,14 +556,9 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 		graphicsSettings->Add(new SettingHint(gr->T("Faster, input lag"), inflightChoice));  // TODO: This hint could use improvement.
 	}
 
-	if (deviceType != DEVICE_TYPE_VR) {
-		CheckBox *hwTransform = graphicsSettings->Add(new CheckBox(&g_Config.bHardwareTransform, gr->T("Hardware Transform")));
-		hwTransform->SetDisabledPtr(&g_Config.bSoftwareRendering);
-	}
-
 	graphicsSettings->Add(new ItemHeader(gr->T("Texture upscaling")));
 
-	if (GetGPUBackend() == GPUBackend::VULKAN) {
+	if (GetGPUBackend() == GPUBackend::VULKAN || GetGPUBackend() == GPUBackend::METAL) {
 		ChoiceWithValueDisplay *textureShaderChoice = graphicsSettings->Add(new ChoiceWithValueDisplay(&g_Config.sTextureShaderName, gr->T("GPU texture upscaler (fast)"), &TextureTranslateName));
 		textureShaderChoice->OnClick.Add([this](UI::EventParams &e) {
 			auto gr = GetI18NCategory(I18NCat::GRAPHICS);
@@ -758,7 +789,7 @@ void GameSettingsScreen::CreateAudioSettings(UI::ViewGroup *audioSettings) {
 #if PPSSPP_PLATFORM(ANDROID)
 	CheckBox *extraAudio = audioSettings->Add(new CheckBox(&g_Config.bExtraAudioBuffering, a->T("AudioBufferingForBluetooth", "Bluetooth-friendly buffer (slower)")));
 
-	// Show OpenSL debug info
+	// Show Oboe debug info
 	const std::string audioErrorStr = AndroidAudio_GetErrorString(g_audioState);
 	if (!audioErrorStr.empty()) {
 		audioSettings->Add(new InfoItem(a->T("Audio Error"), audioErrorStr));
@@ -769,7 +800,10 @@ void GameSettingsScreen::CreateAudioSettings(UI::ViewGroup *audioSettings) {
 	std::vector<std::string> micList = Microphone::getDeviceList();
 	if (!micList.empty()) {
 		audioSettings->Add(new ItemHeader(a->T("Microphone")));
-		PopupMultiChoiceDynamic *MicChoice = audioSettings->Add(new PopupMultiChoiceDynamic(&g_Config.sMicDevice, a->T("Microphone Device"), micList, I18NCat::NONE, screenManager()));
+		std::vector<std::string> micValues = micList;
+		micList.emplace(micList.begin(), a->T("Auto"));
+		micValues.insert(micValues.begin(), "");
+		PopupMultiChoiceDynamic *MicChoice = audioSettings->Add(new PopupMultiChoiceDynamic(&g_Config.sMicDevice, a->T("Microphone Device"), micList, I18NCat::NONE, screenManager(), &micValues));
 		MicChoice->OnChoice.Add([](UI::EventParams &e) {
 			Microphone::onMicDeviceChange();
 		});
@@ -969,13 +1003,34 @@ MacAddressChooser::MacAddressChooser(RequesterToken token, Path gamePath, std::s
 	});
 }
 
+// The nickname is shown on both the Networking and System tabs.
+UI::View *GameSettingsScreen::AddNicknameChoice(UI::ViewGroup *parent) {
+	using namespace UI;
+
+	auto sy = GetI18NCategory(I18NCat::SYSTEM);
+	PopupTextInputChoice *nickname = parent->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sNickName, sy->T("Nickname"), "", 32, screenManager()));
+	if (g_Config.sNickName == "PPSSPP") {
+		nickname->SetIconRight(ImageID("I_WARNING"));
+	}
+	nickname->OnChange.Add([this](UI::EventParams &e) {
+		// Copy to infrastructure name if valid and not already set.
+		if (g_Config.sInfrastructureUsername.empty()) {
+			if (g_Config.sNickName == SanitizeString(g_Config.sNickName, StringRestriction::AlphaNumDashUnderscore, 3, 16)) {
+				g_Config.sInfrastructureUsername = g_Config.sNickName;
+			}
+		}
+		// Updates the warning icon, and the username notice on the Networking tab.
+		RecreateViews();
+	});
+	return nickname;
+}
+
 void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSettings) {
 	using namespace UI;
 
 	auto n = GetI18NCategory(I18NCat::NETWORKING);
 	auto ms = GetI18NCategory(I18NCat::MAINSETTINGS);
 	auto di = GetI18NCategory(I18NCat::DIALOG);
-	auto sy = GetI18NCategory(I18NCat::SYSTEM);
 
 	networkingSettings->Add(new ItemHeader(ms->T("Networking")));
 
@@ -986,7 +1041,15 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 		System_LaunchUrl(LaunchUrlType::BROWSER_URL, url);
 	});
 
-	networkingSettings->Add(new CheckBox(&g_Config.bEnableWlan, n->T("Enable networking", "Enable networking/wlan (beta)")));
+	// Ad hoc play, the built-in server and UPnP all talk to the local network.
+	auto requestLocalNetwork = [](UI::EventParams &e) {
+		CheckBox *checkBox = static_cast<CheckBox *>(e.v);
+		if (checkBox->Toggled()) {
+			System_RequestLocalNetworkPermission();
+		}
+	};
+
+	networkingSettings->Add(new CheckBox(&g_Config.bEnableWlan, n->T("Enable networking", "Enable networking/wlan (beta)")))->OnClick.Add(requestLocalNetwork);
 	networkingSettings->Add(new MacAddressChooser(GetRequesterToken(), gamePath_, &g_Config.sMACAddress, n->T("MAC address"), screenManager()));
 
 	networkingSettings->Add(new ItemHeader(n->T("Ad Hoc multiplayer")));
@@ -1025,16 +1088,20 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 	relayModePopup->SetEnabled(!PSP_IsInited());
 	networkingSettings->Add(new SettingHint(n->T("PacketRelayHint", "Available on servers that provide 'aemu_postoffice' packet relay, like socom.cc. Disable this for LAN or VPN play. Can be more reliable, but sometimes slower."), relayModePopup));
 
-	PopupTextInputChoice *nickname = networkingSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sNickName, sy->T("Nickname"), "", 32, screenManager()));
-	if (g_Config.sNickName == "PPSSPP") {
-		nickname->SetIconRight(ImageID("I_WARNING"));
-	}
-	nickname->OnChange.Add([this](UI::EventParams &e) {
-		RecreateViews();
-	});
-	networkingSettings->Add(new SettingHint(n->T("Try to pick a unique nickname for ad hoc play"), nullptr));
+	View *nicknameChoice = AddNicknameChoice(networkingSettings);
+	networkingSettings->Add(new SettingHint(n->T("Try to pick a unique nickname for ad hoc play"), nicknameChoice));
 
-	networkingSettings->Add(new CheckBox(&g_Config.bEnableAdhocServer, n->T("Enable built-in ad hoc server")));
+	networkingSettings->Add(new CheckBox(&g_Config.bEnableAdhocServer, n->T("Enable built-in ad hoc server")))->OnClick.Add(requestLocalNetwork);
+
+	CheckBox *relay_mode_enet = networkingSettings->Add(new CheckBox(&g_Config.bAdhocUseUdp, n->T("Connect to adhoc server using UDP (ENet) instead of TCP")));
+	relay_mode_enet->SetEnabled(!PSP_IsInited());
+	networkingSettings->Add(new SettingHint(n->T("Try switching between TCP/UDP if you suffer frequent adhoc server disconnects. Some network environments favor TCP and some UDP."), relay_mode_enet));
+
+	CheckBox *relay_mode_enet_pdp_reliable = networkingSettings->Add(new CheckBox(&g_Config.bAdhocRelayModeEnetPdpReliable, n->T("Reliable datagram packet delivery on packet relay in UDP mode")));
+	relay_mode_enet_pdp_reliable->SetEnabledFunc([] {
+		return !PSP_IsInited() && g_Config.bAdhocUseUdp;
+	});
+	networkingSettings->Add(new SettingHint(n->T("When disabled, packet loss on datagram adhoc sockets will be exposed to game's netcode. Keep this enabled if you don't know what that means."), relay_mode_enet_pdp_reliable));
 
 	networkingSettings->Add(new ItemHeader(n->T("Infrastructure")));
 	if (g_Config.sInfrastructureUsername.empty()) {
@@ -1055,7 +1122,8 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 	// and a game that's already mapped its ports wouldn't cope with them disappearing.
 	CheckBox *enableUPnP = networkingSettings->Add(new CheckBox(&g_Config.bEnableUPnP, n->T("Enable UPnP", "Enable UPnP (need a few seconds to detect)")));
 	enableUPnP->SetEnabled(!PSP_IsInited());
-	enableUPnP->OnClick.Add([](UI::EventParams &e) {
+	enableUPnP->OnClick.Add([requestLocalNetwork](UI::EventParams &e) {
+		requestLocalNetwork(e);
 		// Wake the UPnP service thread so it connects (or tears its mappings back down) right
 		// away, instead of waiting for a port request that may never come.
 		UPnP_Notify();
@@ -1282,73 +1350,30 @@ void GameSettingsScreen::CreateSystemSettings(UI::ViewGroup *systemSettings) {
 
 #if PPSSPP_PLATFORM(ANDROID)
 	if (System_GetPropertyInt(SYSPROP_DEVICE_TYPE) != DEVICE_TYPE_VR) {
-		memstickDisplay_ = g_Config.memStickDirectory.ToVisualString();
-		auto memstickPath = systemSettings->Add(new ChoiceWithValueDisplay(&memstickDisplay_, sy->T("Memory Stick folder"), I18NCat::NONE));
+		auto memstickPath = systemSettings->Add(new ChoiceWithCallbackValueDisplay(sy->T("Memory Stick folder"), []() {
+			return g_Config.memStickDirectory.ToVisualString();
+		}));
 		memstickPath->SetEnabled(!PSP_IsInited());
 		memstickPath->OnClick.Handle(this, &GameSettingsScreen::OnShowMemstickScreen);
-
-		// Display USB path for convenience.
-		std::string usbPath;
-		if (PathToVisualUsbPath(g_Config.memStickDirectory, usbPath)) {
-			if (usbPath.empty()) {
-				// Probably it's just the root. So let's add PSP to make it clear.
-				usbPath = "/PSP";
-			}
-		}
 	}
 #elif defined(_WIN32)
 #if PPSSPP_PLATFORM(UWP)
-	memstickDisplay_ = g_Config.memStickDirectory.ToVisualString();
-	auto memstickPath = systemSettings->Add(new ChoiceWithValueDisplay(&memstickDisplay_, sy->T("Memory Stick folder"), I18NCat::NONE));
+	auto memstickPath = systemSettings->Add(new ChoiceWithCallbackValueDisplay(sy->T("Memory Stick folder"), []() {
+		return g_Config.memStickDirectory.ToVisualString();
+	}));
 	memstickPath->SetEnabled(!PSP_IsInited());
 	memstickPath->OnClick.Handle(this, &GameSettingsScreen::OnShowMemstickScreen);
 #else
-	SavePathInMyDocumentChoice = systemSettings->Add(new CheckBox(&installed_, sy->T("Memory Stick in My Documents")));
-	SavePathInMyDocumentChoice->SetEnabled(!PSP_IsInited());
-	SavePathInMyDocumentChoice->OnClick.Handle(this, &GameSettingsScreen::OnMemoryStickMyDoc);
-	SavePathInOtherChoice = systemSettings->Add(new CheckBox(&otherinstalled_, sy->T("Memory Stick in installed.txt")));
-	SavePathInOtherChoice->SetEnabled(false);
-	SavePathInOtherChoice->OnClick.Handle(this, &GameSettingsScreen::OnMemoryStickOther);
-	const bool myDocsExists = W32Util::UserDocumentsPath().size() != 0;
+	CheckBox *myDocsChoice = systemSettings->Add(new CheckBox(&installed_, sy->T("Memory Stick in My Documents")));
+	myDocsChoice->SetEnabledPtr(&memstickMyDocEnabled_);
+	myDocsChoice->OnClick.Handle(this, &GameSettingsScreen::OnMemoryStickMyDoc);
+	CheckBox *otherChoice = systemSettings->Add(new CheckBox(&otherinstalled_, sy->T("Memory Stick in installed.txt")));
+	otherChoice->SetEnabledPtr(&memstickOtherEnabled_);
+	otherChoice->OnClick.Handle(this, &GameSettingsScreen::OnMemoryStickOther);
 
 	if (!System_GetPropertyBool(SYSPROP_CAN_GET_FREE_SPACE_FAST)) {
 		// It might be slow, so use an option.
 		systemSettings->Add(new CheckBox(&g_Config.bReportAccurateFreeStorageSpace, sy->T("Report free storage space accurately")));
-	}
-
-	const Path &PPSSPPpath = File::GetExeDirectory();
-	const Path installedFile = PPSSPPpath / "installed.txt";
-	installed_ = File::Exists(installedFile);
-	otherinstalled_ = false;
-	if (!installed_ && myDocsExists) {
-		if (File::CreateEmptyFile(PPSSPPpath / "installedTEMP.txt")) {
-			// Disable the setting whether cannot create & delete file
-			if (!(File::Delete(PPSSPPpath / "installedTEMP.txt")))
-				SavePathInMyDocumentChoice->SetEnabled(false);
-			else
-				SavePathInOtherChoice->SetEnabled(!PSP_IsInited());
-		} else
-			SavePathInMyDocumentChoice->SetEnabled(false);
-	} else {
-		if (installed_ && myDocsExists) {
-			FILE *testInstalled = File::OpenCFile(installedFile, "rt");
-			if (testInstalled) {
-				char temp[2048];
-				char *tempStr = fgets(temp, sizeof(temp), testInstalled);
-				// Skip UTF-8 encoding bytes if there are any. There are 3 of them.
-				if (tempStr && strncmp(tempStr, "\xEF\xBB\xBF", 3) == 0) {
-					tempStr += 3;
-				}
-				SavePathInOtherChoice->SetEnabled(!PSP_IsInited());
-				if (tempStr && strlen(tempStr) != 0 && strcmp(tempStr, "\n") != 0) {
-					installed_ = false;
-					otherinstalled_ = true;
-				}
-				fclose(testInstalled);
-			}
-		} else if (!myDocsExists) {
-			SavePathInMyDocumentChoice->SetEnabled(false);
-		}
 	}
 #endif
 #endif
@@ -1357,9 +1382,6 @@ void GameSettingsScreen::CreateSystemSettings(UI::ViewGroup *systemSettings) {
 	sizeChoice->SetFormat("%d GB");
 
 	systemSettings->Add(new ItemHeader(sy->T("Help the PPSSPP team")));
-	if (!enableReportsSet_)
-		enableReports_ = Reporting::IsEnabled();
-	enableReportsSet_ = true;
 	CheckBox *enableReportsCheckbox;
 	enableReportsCheckbox = new CheckBox(&enableReports_, sy->T("Enable Compatibility Server Reports"));
 	enableReportsCheckbox->SetEnabledFunc([]() { return Reporting::IsSupported(); });
@@ -1463,14 +1485,7 @@ void GameSettingsScreen::CreateSystemSettings(UI::ViewGroup *systemSettings) {
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iLanguage, psps->T("Game language"), defaultLanguages, -1, ARRAY_SIZE(defaultLanguages), I18NCat::PSPSETTINGS, screenManager()));
 	static const char *models[] = { "PSP-1000", "PSP-2000/3000" };
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iPSPModel, sy->T("PSP Model"), models, 0, ARRAY_SIZE(models), I18NCat::SYSTEM, screenManager()))->SetEnabled(!PSP_IsInited());
-	systemSettings->Add(new PopupTextInputChoice(GetRequesterToken(), &g_Config.sNickName, sy->T("Nickname"), "", 32, screenManager()))->OnChange.Add([](UI::EventParams &e) {
-		// Copy to infrastructure name if valid and not already set.
-		if (g_Config.sInfrastructureUsername.empty()) {
-			if (g_Config.sNickName == SanitizeString(g_Config.sNickName, StringRestriction::AlphaNumDashUnderscore, 3, 16)) {
-				g_Config.sInfrastructureUsername = g_Config.sNickName;
-			}
-		}
-	});
+	UI::View *nicknameChoice = AddNicknameChoice(systemSettings);
 	systemSettings->Add(new CheckBox(&g_Config.bDayLightSavings, sy->T("Daylight savings")));
 	static const char *dateFormat[] = { "YYYYMMDD", "MMDDYYYY", "DDMMYYYY" };
 	systemSettings->Add(new PopupMultiChoice(&g_Config.iDateFormat, sy->T("Date Format"), dateFormat, 0, ARRAY_SIZE(dateFormat), I18NCat::SYSTEM, screenManager()));
@@ -1591,7 +1606,7 @@ void GameSettingsScreen::OnMemoryStickOther(UI::EventParams &e) {
 	}
 	else {
 		File::Delete(PPSSPPpath / "installed.txt");
-		SavePathInMyDocumentChoice->SetEnabled(true);
+		memstickMyDocEnabled_ = true;
 		otherinstalled_ = false;
 		installed_ = false;
 		g_Config.memStickDirectory = PPSSPPpath / "memstick";
@@ -1628,6 +1643,9 @@ void GameSettingsScreen::OnChangeBackground(UI::EventParams &e) {
 			ImageFileType type = ImageFileType::UNKNOWN;
 			if (f != nullptr && 8 == fread(buffer, 1, ARRAY_SIZE(buffer), f)) {
 				type = DetectImageFileType(buffer, ARRAY_SIZE(buffer));
+			}
+			if (f) {
+				fclose(f);
 			}
 
 			std::string filename;
@@ -1678,9 +1696,9 @@ void GameSettingsScreen::dialogFinished(const Screen *dialog, DialogResult resul
 	}
 
 	if (result == DialogResult::DR_OK) {
-		g_Config.iFpsLimit1 = iAlternateSpeedPercent1_ < 0 ? -1 : (iAlternateSpeedPercent1_ * 60) / 100;
-		g_Config.iFpsLimit2 = iAlternateSpeedPercent2_ < 0 ? -1 : (iAlternateSpeedPercent2_ * 60) / 100;
-		g_Config.iAnalogFpsLimit = (iAlternateSpeedPercentAnalog_ * 60) / 100;
+		if (equals(dialog->tag(), "RestoreSettingsScreen")) {
+			ReadConfigTemporaries();
+		}
 		recreate = true;
 	}
 
@@ -1804,6 +1822,7 @@ void GameSettingsScreen::OnAudioDevice(UI::EventParams &e) {
 void GameSettingsScreen::CallbackRestoreDefaults(bool yes) {
 	if (yes) {
 		g_Config.RestoreDefaults(RestoreSettingsBits::SETTINGS);
+		ReadConfigTemporaries();
 	}
 	System_Notify(SystemNotification::UI);
 }

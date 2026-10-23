@@ -66,9 +66,9 @@ void HandleCommonMessages(UIMessage message, const char *value, ScreenManager *m
 
 	if (message == UIMessage::REQUEST_CLEAR_JIT && PSP_IsInited()) {
 		// TODO: This seems to clearly be the wrong place to handle this.
-		if (MIPSComp::jit) {
-			if (MIPSComp::jit)
-				MIPSComp::jit->ClearCache();
+		if (mipsr4k.jit) {
+			if (mipsr4k.jit)
+				mipsr4k.jit->ClearCache();
 		}
 		currentMIPS->UpdateCore((CPUCore)g_Config.iCpuCore);
 	} else if (message == UIMessage::SHOW_CONTROL_MAPPING && isActiveScreen && std::string(activeScreen->tag()) != "ControlMapping") {
@@ -95,6 +95,30 @@ void HandleCommonMessages(UIMessage message, const char *value, ScreenManager *m
 			gstate_c.skipDrawReason &= ~SKIPDRAW_WINDOW_MINIMIZED;
 		}
 	}
+}
+
+// Nothing on the stack shows anything there, so we're in the menus.
+bool BackgroundScreen::renderOutput(const OutputDisplay &output) {
+	if (output.role != OutputRole::Game) {
+		return false;
+	}
+	UIContext &dc = *screenManager()->getUIContext();
+	auto di = GetI18NCategory(I18NCat::DIALOG);
+	std::string text;
+	const std::string deviceName = System_GetProperty(SYSPROP_DEVICE_NAME);
+	const std::string deviceModel = System_GetProperty(SYSPROP_DEVICE_MODEL);
+	if (!deviceName.empty()) {
+		text = ApplySafeSubstitutions(di->T("In menus on %1"), deviceName);
+	} else if (!deviceModel.empty()) {
+		text = ApplySafeSubstitutions(di->T("In menus on your %1"), deviceModel);
+	} else {
+		text = di->T("In menus on your device");
+	}
+	const Bounds &bounds = dc.GetBounds();
+	dc.Begin();
+	dc.DrawText(text, bounds.centerX(), bounds.centerY(), 0xFF505050, ALIGN_CENTER);
+	dc.Flush();
+	return true;
 }
 
 ScreenRenderFlags BackgroundScreen::render(ScreenRenderMode mode) {
@@ -367,7 +391,7 @@ void LogoScreen::Next() {
 		switch (afterLogoScreen_) {
 		case AfterLogoScreen::TO_GAME_SETTINGS:
 			if (!gamePath.empty()) {
-				screenManager()->switchScreen(new EmuScreen(gamePath));
+				screenManager()->switchScreen(new EmuScreen(gamePath, boot_mountIso));
 			} else {
 				screenManager()->switchScreen(new MainScreen());
 			}
@@ -379,7 +403,7 @@ void LogoScreen::Next() {
 		case AfterLogoScreen::DEFAULT:
 		default:
 			if (boot_filename.size()) {
-				screenManager()->switchScreen(new EmuScreen(gamePath));
+				screenManager()->switchScreen(new EmuScreen(gamePath, boot_mountIso));
 			} else {
 				screenManager()->switchScreen(new MainScreen());
 			}

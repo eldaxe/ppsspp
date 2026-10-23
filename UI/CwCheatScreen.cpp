@@ -160,14 +160,11 @@ bool CwCheatScreen::WantsTextInput() const {
 
 bool CwCheatScreen::TryLoadCheatInfo() {
 	std::shared_ptr<GameInfo> info = g_gameInfoCache->GetInfo(nullptr, gamePath_, GameInfoFlags::PARAM_SFO);
-	std::string gameID;
 	if (!info->Ready(GameInfoFlags::PARAM_SFO)) {
 		return false;
 	}
-	gameID = info->GetParamSFO().GetValueString("DISC_ID");
-	if ((info->id.empty() || !info->disc_total)	&& gamePath_.FilePathContainsNoCase("PSP/GAME/")) {
-		gameID = g_paramSFO.GenerateFakeID(gamePath_);
-	}
+	// The cache has already replaced the ID of homebrew with a generated one.
+	const std::string &gameID = info->id;
 
 	if (!engine_ || gameID != gameID_) {
 		gameID_ = gameID;
@@ -183,7 +180,7 @@ bool CwCheatScreen::TryLoadCheatInfo() {
 	}
 	fileCheckCounter_ = 0;
 
-	fileInfo_ = engine_->FileInfo();
+	fileInfo_ = engine_->FileInfo(&parseErrors_);
 
 	// Let's also trigger a reload, in case it changed.
 	g_Config.bReloadCheats = true;
@@ -205,6 +202,9 @@ bool CwCheatScreen::key(const KeyInput &input) {
 
 void CwCheatScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 	if (auto downloadScreen = dynamic_cast<const CwCheatDownloadPopupScreen *>(dialog)) {
+		if (result != DR_OK || downloadScreen->ChosenUrl().empty()) {
+			return;
+		}
 		if (downloadRequest_) {
 			ERROR_LOG(Log::CwCheats, "Download already in progress, ignoring new download request.");
 			return;
@@ -286,6 +286,23 @@ void CwCheatScreen::CreateContentViews(UI::ViewGroup *parent) {
 		rightColumn->Add(new Spacer(8.0f));
 	}
 
+	if (!parseErrors_.empty()) {
+		// Cheats with a bad line are left out of the list, so say why.
+		const size_t maxShown = 5;
+		std::string details;
+		for (size_t i = 0; i < parseErrors_.size() && i < maxShown; i++) {
+			if (i > 0) {
+				details += '\n';
+			}
+			details += parseErrors_[i];
+		}
+		if (parseErrors_.size() > maxShown) {
+			details += "\n...";
+		}
+		rightColumn->Add(new NoticeView(NoticeLevel::WARN, cw->T("Some lines in the cheat file could not be read"), details));
+		rightColumn->Add(new Spacer(8.0f));
+	}
+
 	rightColumn->Add(new ItemHeader(cw->T("Cheats")));
 
 	bool prevIsTitle = false;
@@ -359,8 +376,8 @@ void CwCheatScreen::onFinish(DialogResult result) {
 	if (result != DR_BACK) // This only works for BACK here.
 		return;
 
-	if (MIPSComp::jit) {
-		MIPSComp::jit->ClearCache();
+	if (mipsr4k.jit) {
+		mipsr4k.jit->ClearCache();
 	}
 }
 
@@ -384,8 +401,8 @@ void CwCheatScreen::OnAddCheat(UI::EventParams &params) {
 
 void CwCheatScreen::OnEditCheatFile(UI::EventParams &params) {
 	g_Config.bReloadCheats = true;
-	if (MIPSComp::jit) {
-		MIPSComp::jit->ClearCache();
+	if (mipsr4k.jit) {
+		mipsr4k.jit->ClearCache();
 	}
 	if (engine_) {
 		File::OpenFileInEditor(engine_->CheatFilename());
@@ -412,7 +429,7 @@ void CwCheatScreen::ImportAndReport(const Path &cheatFile) {
 	int cheatCount = 0;
 	if (!ImportCheats(cheatFile, &cheatCount)) {
 		// Show an error message?
-		if (File::Exists(cheatFile)) {
+		if (!File::Exists(cheatFile)) {
 			auto er = GetI18NCategory(I18NCat::ERRORS);
 			errorMessage_ = ApplySafeSubstitutions(er->T("File not found: %1"), "");
 			errorLevel_ = NoticeLevel::WARN;
@@ -457,14 +474,14 @@ void CwCheatScreen::OnImportCheat(UI::EventParams &params) {
 }
 
 bool CwCheatScreen::ImportCheats(const Path &cheatFile, int *cheatsFound) {
-	FILE *in = File::OpenCFile(cheatFile, "rt");
-	if (!in) {
-		WARN_LOG(Log::CwCheats, "Unable to open %s\n", cheatFile.c_str());
+	if (gameID_.length() != 9 || !engine_) {
+		WARN_LOG(Log::CwCheats, "CWCHEAT: Incorrect ID(%s) - can't import cheats.", gameID_.c_str());
 		return false;
 	}
 
-	if (gameID_.length() != 9 || !engine_) {
-		WARN_LOG(Log::CwCheats, "CWCHEAT: Incorrect ID(%s) - can't import cheats.", gameID_.c_str());
+	FILE *in = File::OpenCFile(cheatFile, "rt");
+	if (!in) {
+		WARN_LOG(Log::CwCheats, "Unable to open %s\n", cheatFile.c_str());
 		return false;
 	}
 
@@ -508,7 +525,7 @@ bool CwCheatScreen::ImportCheats(const Path &cheatFile, int *cheatsFound) {
 
 		if (line[0] == '_' && (line[1] == 'S' || line[1] == 'G') && title.size() < 2) {
 			title.push_back(line);
-		} else if (parseCheatEntry && ((line[0] == '_' && (line[1] == 'C' || line[1] == 'L')) || line[0] == '/' || line[0] == '#')) {
+		} else if (parseCheatEntry && ((line[0] == '_' && (line[1] == 'C' || line[1] == 'L' || line[1] == 'M')) || line[0] == '/' || line[0] == '#')) {
 			newList.push_back(line);
 			(*cheatsFound)++;
 		}

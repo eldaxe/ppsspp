@@ -58,6 +58,12 @@ pspsh -p 3000 -e ls                 # sanity check - should list the pspautotest
 If `ls` shows `host0:/` contents you have a working chain. If it hangs or shows nothing, PSPLink
 isn't running or the USB driver didn't bind.
 
+**Under WSL** the PSP first has to be passed through from Windows with usbipd-win (steps 10-12 of
+<https://pspdev.github.io/psplink/windows.html>). `Tools/psplink_wsl.sh` does that and then starts
+`usbhostfs_pc` in the current directory, so run it from `pspautotests` in place of the
+`usbhostfs_pc` line above. It asks for a UAC prompt the first time the PSP is shared, and re-attaches
+after a PSPLink reset or a move to another USB port.
+
 ## How a test reports its results
 
 `common/common.c` wraps every test. Before `main()` it redirects the process's `stdout` and
@@ -182,6 +188,18 @@ python3 test.py --graphics=software io/shortname/shortname
 - **A test that hangs leaves the PSP wedged.** `gentest.py` issues `pspsh -e reset` after a
   timeout, but if you ran the PRX by hand, do that yourself. Default timeout is 10s; raise it with
   `-t SECONDS`.
+- **Bound every wait on the PSP, including the whole command.** A test that hasn't finished in 10
+  seconds is hung; a longer timeout only delays finding out which call blocks. To check whether the
+  PSP is alive, run `pspsh -p 3000 -e ls` in the background and give up after 10 seconds (macOS has
+  no `timeout` command). `gentest.py -t` doesn't cap the run either: its recovery `pspsh -e reset`
+  blocks forever if the PSP is really gone, so put a limit on the shell command as well.
+- **A PSP that doesn't answer may only need the host side restarted.** If it still enumerates over
+  USB (`ioreg -p IOUSB -l -w 0 | grep -i "USB Product Name"` shows "PSP Type B" on macOS), kill
+  `usbhostfs_pc`, start it again from the pspautotests root, and probe once more. Otherwise someone has
+  to restart PSPLink or reconnect the cable.
+- **Never let a test exit with a utility dialog still active.** A dialog left in INIT, RUNNING or
+  FINISHED keeps the utility module busy, and the next `reset` hangs PSPLink until it's restarted by
+  hand. In utility tests, bound every wait, and run a case that might not finish last and alone.
 - **`tests_to_generate` in `gentest.py`** - the list used when you pass no arguments - is stale;
   several paths in it no longer exist. Always name the test you want.
 - **`--sdkver` matters for some APIs.** `gentest.py --sdkver=6060010 --sdkver-func=606` makes the
@@ -189,6 +207,10 @@ python3 test.py --graphics=software io/shortname/shortname
   known version reporting which ones behave differently - a fast way to find version-gated
   behavior. A test can also call `sceKernelSetCompiledSdkVersion*()` mid-run to cover several
   versions in one `.expected`.
+- **On a PSP, printed output is also drawn on the screen**, into the display framebuffer. A GPU test that
+  renders into that framebuffer and prints between draws reads its own text back: each line changed the
+  alpha of a few pixels under it in the next draw, deterministically on the PSP and never in PPSSPP. Set
+  `HAS_DISPLAY = 0` (`extern "C" int HAS_DISPLAY;`, from `common.c`) after setting up the display.
 - **The module must be named `TESTMODULE`** (`common.c` does this) or `gentest.py` prints the load
   line as an unexpected result.
 
@@ -275,8 +297,9 @@ so on a collision.
 
 `pspautotests` is a git submodule, so a new test is two commits:
 
-1. Commit and push inside `pspautotests/` (the new test directory, including the built `.prx` and
-   the generated `.expected`).
+1. Commit inside `pspautotests/` (the new test directory, including the built `.prx` and the
+   generated `.expected`), rebase it onto `origin/master`, and push it straight to `master` - no
+   branch, no PR, and no need to ask first.
 2. Commit in the PPSSPP repo, including **both** the `test.py` change and the bumped submodule
    pointer (`git add pspautotests`) - otherwise CI checks out the old submodule and the test
    doesn't exist.

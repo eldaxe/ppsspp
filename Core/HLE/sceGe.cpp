@@ -158,8 +158,17 @@ public:
 	}
 
 	void handleResult(PendingInterrupt& pend) override {
+		// Only from a broken savestate: the interrupt was running, but nothing is pending.
+		if (ge_pending_cb.empty()) {
+			ERROR_LOG(Log::sceGe, "GE interrupt finished with nothing pending");
+			return;
+		}
 		GeInterruptData intrdata = ge_pending_cb.front();
 		ge_pending_cb.pop_front();
+		if (!gpu->IsValidListId(intrdata.listid)) {
+			ERROR_LOG(Log::sceGe, "GE interrupt finished for invalid list %d", intrdata.listid);
+			return;
+		}
 
 		DisplayList* dl = gpu->getList(intrdata.listid);
 		if (!dl->interruptsEnabled) {
@@ -171,7 +180,7 @@ public:
 		case PSP_GE_SIGNAL_HANDLER_SUSPEND:
 			if (sceKernelGetCompiledSdkVersion() <= 0x02000010) {
 				// uofw says dl->state = endCmd & 0xFF;
-				DisplayListState newState = static_cast<DisplayListState>(Memory::ReadUnchecked_U32(intrdata.pc - 4) & 0xFF);
+				DisplayListState newState = static_cast<DisplayListState>(Memory::IsValid4AlignedAddress(intrdata.pc - 4) ? Memory::ReadUnchecked_U32(intrdata.pc - 4) & 0xFF : 0);
 				//dl->status = static_cast<DisplayListStatus>(Memory::ReadUnchecked_U32(intrdata.pc) & 0xFF);
 				//if(dl->status < 0 || dl->status > PSP_GE_LIST_PAUSED)
 				//	ERROR_LOG(Log::sceGe, "Weird DL status after signal suspend %x", dl->status);
@@ -257,8 +266,18 @@ void __GeDoState(PointerWrap &p) {
 		ge_pending_cb.clear();
 		for (const auto &ge : old) {
 			GeInterruptData intrdata = {ge.listid, ge.pc};
-			intrdata.cmd = Memory::ReadUnchecked_U32(ge.pc - 4) >> 24;
+			intrdata.cmd = Memory::IsValid4AlignedAddress(ge.pc - 4) ? Memory::ReadUnchecked_U32(ge.pc - 4) >> 24 : 0;
 			ge_pending_cb.push_back(intrdata);
+		}
+	}
+	if (p.mode == p.MODE_READ) {
+		for (const auto &intrdata : ge_pending_cb) {
+			if (!gpu->IsValidListId(intrdata.listid)) {
+				ERROR_LOG(Log::sceGe, "Savestate failure: invalid pending GE interrupt list id %d", intrdata.listid);
+				p.SetError(p.ERROR_FAILURE);
+				ge_pending_cb.clear();
+				return;
+			}
 		}
 	}
 
@@ -369,11 +388,23 @@ static u32 sceGeEdramGetSize() {
 	return hleLogVerbose(Log::sceGe, retVal);
 }
 
+// The calls a PSP-2000 and later switch to their 4MB of VRAM with. We have the PSP-1000's 2MB, and
+// answer as it does (gpu/ge/kernel/edramsize).
+static u32 sceGeEdramGetHwSize() {
+	return hleLogDebug(Log::sceGe, 0x00200000);
+}
+
+static int sceGeEdramSetSize(u32 size) {
+	if (size != 0x00200000)
+		return hleLogWarning(Log::sceGe, SCE_KERNEL_ERROR_INVALID_SIZE);
+	return hleLogDebug(Log::sceGe, 0);
+}
+
 static int __GeSubIntrBase(int callbackId) {
 	return callbackId * 2;
 }
 
-u32 sceGeListEnQueue(u32 listAddress, u32 stallAddress, int callbackId, u32 optParamAddr) {
+u32 sceGeListEnQueue(MIPSState *mips, u32 listAddress, u32 stallAddress, int callbackId, u32 optParamAddr) {
 	auto optParam = PSPPointer<PspGeListArgs>::Create(optParamAddr);
 
 	bool runList;
@@ -391,14 +422,14 @@ u32 sceGeListEnQueue(u32 listAddress, u32 stallAddress, int callbackId, u32 optP
 	hleCoreTimingForceCheck();
 	DEBUG_LOG(Log::sceGe,
 		"%08x=sceGeListEnQueue(addr=%08x, stall=%08x, cbid=%08x, param=%08x) ticks=%lld", listID,
-		listAddress, stallAddress, callbackId, optParamAddr, (long long)CoreTiming::GetTicks(currentMIPS));
+		listAddress, stallAddress, callbackId, optParamAddr, (long long)CoreTiming::GetTicks(mips));
 	return hleNoLog(listID); // We already logged above, logs get confusing if we use hleLogSuccess.
 }
 
-u32 sceGeListEnQueueHead(u32 listAddress, u32 stallAddress, int callbackId, u32 optParamAddr) {
+u32 sceGeListEnQueueHead(MIPSState *mips, u32 listAddress, u32 stallAddress, int callbackId, u32 optParamAddr) {
 	DEBUG_LOG(Log::sceGe,
 		"sceGeListEnQueueHead(addr=%08x, stall=%08x, cbid=%08x, param=%08x) ticks=%lld",
-		listAddress, stallAddress, callbackId, optParamAddr, (long long)CoreTiming::GetTicks(currentMIPS));
+		listAddress, stallAddress, callbackId, optParamAddr, (long long)CoreTiming::GetTicks(mips));
 	auto optParam = PSPPointer<PspGeListArgs>::Create(optParamAddr);
 
 	bool runList;
@@ -457,7 +488,16 @@ static u32 sceGeDrawSync(u32 mode) {
 	else if (!PSP_CoreParameter().compat.flags().DrawSyncInstant)
 		hleEatCycles(1240);
 	gstate_c.textureSyncTimeDomain++;
-	return hleLogDebug(Log::sceGe, gpu->DrawSync(mode));
+	u32 result = gpu->DrawSync(mode);
+	if (mode == 0 && PSP_CoreParameter().compat.flags().ColorPickingDrawSyncReadback) {
+		// The game waits for its picking pass here and then reads it from VRAM. It renders to one
+		// of two buffers, so read back the one the last list drew to.
+		const u32 fb = 0x04000000 | gstate.getFrameBufRawAddress();
+		if (fb == 0x04000000 || fb == 0x04080000) {
+			gpu->PerformReadbackToMemory(fb, 0x00044000);
+		}
+	}
+	return hleLogDebug(Log::sceGe, result);
 }
 
 static int sceGeContinue() {
@@ -665,8 +705,17 @@ const HLEFunction sceGe_user[] = {
 	{0X0BF608FB, &WrapU_U<sceGeRestoreContext>,          "sceGeRestoreContext",          'x', "x"   },
 	{0X5FB86AB0, &WrapI_U<sceGeListDeQueue>,             "sceGeListDeQueue",             'i', "x"   },
 	{0XE66CB92E, &WrapI_IU<sceGeGetStack>,               "sceGeGetStack",                'i', "ix"  },
+	// Driver only.
+	{0X547EC5F0, &WrapU_V<sceGeEdramGetHwSize>,          "sceGeEdramGetHwSize",          'x', ""    },
+	{0XD8633888, &WrapI_U<sceGeEdramSetSize>,            "sceGeEdramSetSize",            'i', "x"   },
 };
 
 void Register_sceGe_user() {
 	RegisterHLEModule("sceGe_user", ARRAY_SIZE(sceGe_user), sceGe_user);
+}
+
+void Register_sceGe_driver() {
+	// Same function set as sceGe_user; imported by kernel modules like chfont.prx
+	// using the driver NIDs (e.g. 0xE47E40E4 = sceGeEdramGetAddr).
+	RegisterHLEModule("sceGe_driver", ARRAY_SIZE(sceGe_user), sceGe_user);
 }

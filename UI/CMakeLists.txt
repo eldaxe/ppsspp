@@ -7,6 +7,7 @@ if(NOT LIBRETRO)
 endif()
 
 list(APPEND UISource
+	ImDebugger/ImCommand.h
 	ImDebugger/ImDebugger.cpp
 	ImDebugger/ImDebugger.h
 	ImDebugger/ImGe.cpp
@@ -22,6 +23,7 @@ list(APPEND UISource
 	ImDebugger/ImJitViewer.cpp
 	ImDebugger/ImJitViewer.h
 	DiscordIntegration.cpp
+	DiscordIntegration.h
 	NativeApp.cpp
 	AdhocServerScreen.h
 	AdhocServerScreen.cpp
@@ -61,6 +63,8 @@ list(APPEND UISource
 	TabbedDialogScreen.cpp
 	GameScreen.h
 	GameScreen.cpp
+	GamePacker.h
+	GamePacker.cpp
 	GameSettingsScreen.h
 	GameSettingsScreen.cpp
 	DeveloperToolsScreen.h
@@ -91,6 +95,8 @@ list(APPEND UISource
 	ReportScreen.cpp
 	SavedataScreen.h
 	SavedataScreen.cpp
+	ShareFiles.h
+	ShareFiles.cpp
 	SystemInfoScreen.h
 	SystemInfoScreen.cpp
 	Store.h

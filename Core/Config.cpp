@@ -16,10 +16,12 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdlib>
 #include <ctime>
 #include <mutex>
 #include <set>
+#include <type_traits>
 #include <sstream>
 #include <thread>
 
@@ -80,6 +82,8 @@ std::string GPUBackendToString(GPUBackend backend) {
 		return "DIRECT3D11";
 	case GPUBackend::VULKAN:
 		return "VULKAN";
+	case GPUBackend::METAL:
+		return "METAL";
 	}
 	// Intentionally not a default so we get a warning.
 	return "INVALID";
@@ -92,6 +96,8 @@ GPUBackend GPUBackendFromString(std::string_view backend) {
 		return GPUBackend::DIRECT3D11;
 	if (equalsNoCase(backend, "VULKAN") || backend == "3")
 		return GPUBackend::VULKAN;
+	if (equalsNoCase(backend, "METAL") || backend == "4")
+		return GPUBackend::METAL;
 	return GPUBackend::OPENGL;
 }
 
@@ -195,6 +201,28 @@ static bool DefaultEnableStateUndo() {
 	return true;
 }
 
+// The old GridView bools, read as ints so a missing key (-1) can be told apart from false.
+static int LegacyGridViewFromString(const std::string &value) {
+	return equalsNoCase(value, "True") ? 1 : 0;
+}
+
+static std::string LegacyGridViewToString(int value) {
+	return value == 1 ? "True" : "False";
+}
+
+static int GameBrowserViewFromGridView(int legacyGridView, GameBrowserViewMode defaultMode) {
+	if (legacyGridView < 0) {
+		return (int)defaultMode;
+	}
+	return (int)(legacyGridView ? GameBrowserViewMode::GRID : GameBrowserViewMode::LIST);
+}
+
+// Recent, Games and Homebrew switch everyone to the large list, ignoring the old setting. Remote keeps it.
+static int DefaultGameBrowserView1() { return (int)GameBrowserViewMode::LARGE_LIST; }
+static int DefaultGameBrowserView2() { return (int)GameBrowserViewMode::LARGE_LIST; }
+static int DefaultGameBrowserView3() { return (int)GameBrowserViewMode::LARGE_LIST; }
+static int DefaultGameBrowserView4() { return GameBrowserViewFromGridView(g_Config.iLegacyGridView4, GameBrowserViewMode::LIST); }
+
 static float DefaultGameGridScale() {
 #if PPSSPP_PLATFORM(IOS)
 	return 1.25f;
@@ -223,11 +251,19 @@ static int DefaultScreenRotation() {
 #endif
 }
 
-#define SETTING(a, x) &a, &a.x
-#define SETTING_IDX(a, x, i) &a, &a.x[i]
+#if defined(__GNUC__) || defined(__clang__)
+// offsetof on classes with virtual functions (like ConfigBlock) is conditionally supported, and our compilers do support it.
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#endif
+
+// The type of the block a setting lives in, from an expression like g_Config or g_Config.gestureControls[0].
+#define CONFIG_BLOCK_TYPE(a) std::remove_reference_t<decltype(a)>
+// Offsets are taken with offsetof, so the tables can be constexpr.
+#define SETTING(a, x) ConfigSettingOffset<decltype(CONFIG_BLOCK_TYPE(a)::x)>{ (uint32_t)offsetof(CONFIG_BLOCK_TYPE(a), x) }
+#define SETTING_IDX(a, x, i) ConfigSettingOffset<std::remove_extent_t<decltype(CONFIG_BLOCK_TYPE(a)::x)>>{ (uint32_t)(offsetof(CONFIG_BLOCK_TYPE(a), x) + (i) * sizeof(std::remove_extent_t<decltype(CONFIG_BLOCK_TYPE(a)::x)>)) }
 
 // All relative to g_Config.
-static const ConfigSetting generalSettings[] = {
+static constexpr ConfigSetting generalSettings[] = {
 	ConfigSetting("FirstRun", SETTING(g_Config, bFirstRun), true, CfgFlag::DEFAULT),
 	ConfigSetting("RunCount", SETTING(g_Config, iRunCount), 0, CfgFlag::DEFAULT),
 	ConfigSetting("Enable Logging", SETTING(g_Config, bEnableLogging), true, CfgFlag::PER_GAME),
@@ -283,10 +319,12 @@ static const ConfigSetting generalSettings[] = {
 	ConfigSetting("ShowRegionOnGameIcon", SETTING(g_Config, bShowRegionOnGameIcon), false, CfgFlag::DEFAULT),
 	ConfigSetting("ShowIDOnGameIcon", SETTING(g_Config, bShowIDOnGameIcon), false, CfgFlag::DEFAULT),
 	ConfigSetting("GameGridScale", SETTING(g_Config, fGameGridScale), &DefaultGameGridScale, CfgFlag::DEFAULT),
-	ConfigSetting("GridView1", SETTING(g_Config, bGridView1), true, CfgFlag::DEFAULT),
-	ConfigSetting("GridView2", SETTING(g_Config, bGridView2), true, CfgFlag::DEFAULT),
-	ConfigSetting("GridView3", SETTING(g_Config, bGridView3), false, CfgFlag::DEFAULT),
-	ConfigSetting("GridView4", SETTING(g_Config, bGridView4), false, CfgFlag::DEFAULT),
+	ConfigSetting("GridView4", SETTING(g_Config, iLegacyGridView4), -1, &LegacyGridViewToString, &LegacyGridViewFromString, CfgFlag::DONT_SAVE),
+	// These must come after GridView*, which their defaults are taken from.
+	ConfigSetting("GameBrowserView1", SETTING(g_Config, iGameBrowserView1), &DefaultGameBrowserView1, CfgFlag::DEFAULT),
+	ConfigSetting("GameBrowserView2", SETTING(g_Config, iGameBrowserView2), &DefaultGameBrowserView2, CfgFlag::DEFAULT),
+	ConfigSetting("GameBrowserView3", SETTING(g_Config, iGameBrowserView3), &DefaultGameBrowserView3, CfgFlag::DEFAULT),
+	ConfigSetting("GameBrowserView4", SETTING(g_Config, iGameBrowserView4), &DefaultGameBrowserView4, CfgFlag::DEFAULT),
 	ConfigSetting("RightAnalogUp", SETTING(g_Config, iRightAnalogUp), 0, CfgFlag::PER_GAME),
 	ConfigSetting("RightAnalogDown", SETTING(g_Config, iRightAnalogDown), 0, CfgFlag::PER_GAME),
 	ConfigSetting("RightAnalogLeft", SETTING(g_Config, iRightAnalogLeft), 0, CfgFlag::PER_GAME),
@@ -303,6 +341,8 @@ static const ConfigSetting generalSettings[] = {
 	ConfigSetting("CompressSymbols", SETTING(g_Config, bCompressSymbols), true, CfgFlag::DEFAULT),
 	ConfigSetting("CacheFullIsoInRam", SETTING(g_Config, bCacheFullIsoInRam), false, CfgFlag::PER_GAME),
 	ConfigSetting("AutoUpgradeFirmware", SETTING(g_Config, bAutoUpgradeFirmware), true, CfgFlag::DEFAULT),
+	ConfigSetting("CSOPreset", SETTING(g_Config, iCSOPreset), 0, CfgFlag::DEFAULT),
+	ConfigSetting("PackKeepOriginal", SETTING(g_Config, bPackKeepOriginal), false, CfgFlag::DEFAULT),
 	ConfigSetting("RemoteISOPort", SETTING(g_Config, iRemoteISOPort), 0, CfgFlag::DEFAULT),
 	ConfigSetting("LastRemoteISOServer", SETTING(g_Config, sLastRemoteISOServer), "", CfgFlag::DEFAULT),
 	ConfigSetting("LastRemoteISOPort", SETTING(g_Config, iLastRemoteISOPort), 0, CfgFlag::DEFAULT),
@@ -375,7 +415,7 @@ static bool DefaultSasThread() {
 	return cpu_info.num_cores > 1;
 }
 
-static const ConfigSetting achievementSettings[] = {
+static constexpr ConfigSetting achievementSettings[] = {
 	// Core settings
 	ConfigSetting("AchievementsEnable", SETTING(g_Config, bAchievementsEnable), false, CfgFlag::PER_GAME),
 	ConfigSetting("AchievementsEnableRAIntegration", SETTING(g_Config, bAchievementsEnableRAIntegration), false, CfgFlag::DEFAULT),
@@ -405,11 +445,12 @@ static const ConfigSetting achievementSettings[] = {
 	ConfigSetting("AchievementsUnlockedPos", SETTING(g_Config, iAchievementsUnlockedPos), (int)ScreenEdgePosition::TOP_CENTER, CfgFlag::PER_GAME | CfgFlag::DEFAULT),
 };
 
-static const ConfigSetting cpuSettings[] = {
+static constexpr ConfigSetting cpuSettings[] = {
 	ConfigSetting("CPUCore", SETTING(g_Config, iCpuCore), &DefaultCpuCore, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("SeparateSASThread", SETTING(g_Config, bSeparateSASThread), &DefaultSasThread, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("IOTimingMethod", SETTING(g_Config, iIOTimingMethod), IOTIMING_FAST, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("FastMemoryAccess", SETTING(g_Config, bFastMemory), true, CfgFlag::PER_GAME),
+	ConfigSetting("EmulateMediaEngine", SETTING(g_Config, bEmulateMediaEngine), false, CfgFlag::REPORT),
 	ConfigSetting("FunctionReplacements", SETTING(g_Config, bFuncReplacements), true, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("HideSlowWarnings", SETTING(g_Config, bHideSlowWarnings), false, CfgFlag::DEFAULT),
 	ConfigSetting("HideStateWarnings", SETTING(g_Config, bHideStateWarnings), false, CfgFlag::DEFAULT),
@@ -495,8 +536,11 @@ static int DefaultGPUBackend() {
 	return (int)GPUBackend::OPENGL;
 #endif
 
-#elif PPSSPP_PLATFORM(IOS_APP_STORE)
+#elif PPSSPP_PLATFORM(TVOS) && !defined(__LIBRETRO__)
+	// Metal hasn't been tried on tvOS yet.
 	return (int)GPUBackend::VULKAN;
+#elif PPSSPP_PLATFORM(IOS) && !defined(__LIBRETRO__)
+	return (int)GPUBackend::METAL;
 #endif
 
 	// TODO: On some additional Linux platforms, we should also default to Vulkan.
@@ -581,6 +625,11 @@ bool Config::IsBackendEnabled(GPUBackend backend) {
 		return false;
 #endif
 
+#if !PPSSPP_API(METAL)
+	if (backend == GPUBackend::METAL)
+		return false;
+#endif
+
 #if !PPSSPP_API(ANY_GL)
 	if (backend == GPUBackend::OPENGL)
 		return false;
@@ -640,7 +689,7 @@ bool DisplayLayoutConfig::ResetToDefault(std::string_view blockName) {
 // These were previously part of Graphics.
 // It's instantiated into g_Config.displayLayoutLandscape and g_Config.displayLayoutPortrait.
 // Defaults are set directly on the struct declaration (and adjusted per instance in ResetToDefault above).
-static const ConfigSetting displayLayoutSettings[] = {
+static constexpr ConfigSetting displayLayoutSettings[] = {
 	ConfigSetting("BufferFiltering", SETTING(g_Config.displayLayoutLandscape, iDisplayFilter), CfgFlag::PER_GAME),
 	ConfigSetting("DisplayStretch", SETTING(g_Config.displayLayoutLandscape, bDisplayStretch), CfgFlag::PER_GAME),
 	ConfigSetting("DisplayOffsetX", SETTING(g_Config.displayLayoutLandscape, fDisplayOffsetX), CfgFlag::PER_GAME),
@@ -649,6 +698,7 @@ static const ConfigSetting displayLayoutSettings[] = {
 	ConfigSetting("DisplayIntegerScale", SETTING(g_Config.displayLayoutLandscape, bDisplayIntegerScale), CfgFlag::PER_GAME),
 	ConfigSetting("DisplayAspectRatio", SETTING(g_Config.displayLayoutLandscape, fDisplayAspectRatio), CfgFlag::PER_GAME),
 	ConfigSetting("IgnoreScreenInsets", SETTING(g_Config.displayLayoutLandscape, bIgnoreScreenInsets), CfgFlag::PER_GAME),
+	ConfigSetting("Overlay", SETTING(g_Config.displayLayoutLandscape, sOverlay), "", CfgFlag::PER_GAME),
 	ConfigSetting("InternalScreenRotation", SETTING(g_Config.displayLayoutLandscape, iInternalScreenRotation), CfgFlag::PER_GAME),
 	ConfigSetting("RotateControlsWithScreen", SETTING(g_Config.displayLayoutLandscape, bRotateControlsWithScreen), CfgFlag::PER_GAME),
 	ConfigSetting("EnableCardboardVR", SETTING(g_Config.displayLayoutLandscape, bEnableCardboardVR), CfgFlag::PER_GAME),
@@ -666,7 +716,7 @@ bool GestureControlConfig::ResetToDefault(std::string_view blockName) {
 }
 
 // These were previously mostly part of General (which was wrong).
-static const ConfigSetting gestureControlSettings[] = {
+static constexpr ConfigSetting gestureControlSettings[] = {
 	ConfigSetting("SwipeUp", SETTING(g_Config.gestureControls[0], iSwipeUp), 0, CfgFlag::PER_GAME),
 	ConfigSetting("SwipeDown", SETTING(g_Config.gestureControls[0], iSwipeDown), 0, CfgFlag::PER_GAME),
 	ConfigSetting("SwipeLeft", SETTING(g_Config.gestureControls[0], iSwipeLeft), 0, CfgFlag::PER_GAME),
@@ -679,9 +729,27 @@ static const ConfigSetting gestureControlSettings[] = {
 	ConfigSetting("AnalogGestureSensibility", SETTING(g_Config.gestureControls[0], fAnalogGestureSensitivity), 1.0f, CfgFlag::PER_GAME),
 };
 
-static const ConfigSetting graphicsSettings[] = {
+// The alternative speeds used to be stored as frame rates, out of 60.
+static int LegacyFpsLimitToPercent(int fps) {
+	return fps < 0 ? -1 : (fps * 100 + 30) / 60;
+}
+
+static int DefaultAltSpeedPercent1() {
+	return LegacyFpsLimitToPercent(g_Config.iLegacyFpsLimit1);
+}
+
+static int DefaultAltSpeedPercent2() {
+	return LegacyFpsLimitToPercent(g_Config.iLegacyFpsLimit2);
+}
+
+static int DefaultAnalogAltSpeedPercent() {
+	return LegacyFpsLimitToPercent(g_Config.iLegacyAnalogFpsLimit);
+}
+
+static constexpr ConfigSetting graphicsSettings[] = {
 	ConfigSetting("iShowStatusFlags", SETTING(g_Config, iShowStatusFlags), 0, CfgFlag::PER_GAME),
 	ConfigSetting("GraphicsBackend", SETTING(g_Config, iGPUBackend), &DefaultGPUBackend, &GPUBackendTranslator::To, &GPUBackendTranslator::From, CfgFlag::DEFAULT | CfgFlag::REPORT),
+	ConfigSetting("ExternalDisplay", SETTING(g_Config, iExternalDisplay), (int)ExternalDisplayMode::SHOW_GAME, CfgFlag::DEFAULT),
 #if PPSSPP_PLATFORM(ANDROID) && PPSSPP_ARCH(ARM64)
 	ConfigSetting("CustomDriver", SETTING(g_Config, sCustomDriver), "", CfgFlag::DEFAULT),
 #endif
@@ -698,20 +766,23 @@ static const ConfigSetting graphicsSettings[] = {
 	ConfigSetting("DepthRasterMode", SETTING(g_Config, iDepthRasterMode), &DefaultDepthRaster, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("SoftwareRenderer", SETTING(g_Config, bSoftwareRendering), false, CfgFlag::PER_GAME),
 	ConfigSetting("SoftwareDisableDithering", SETTING(g_Config, bSoftwareDisableDithering), false, CfgFlag::PER_GAME),
-	ConfigSetting("SoftwareRendererJit", SETTING(g_Config, bSoftwareRenderingJit), true, CfgFlag::PER_GAME),
-	ConfigSetting("HardwareTransform", SETTING(g_Config, bHardwareTransform), true, CfgFlag::PER_GAME | CfgFlag::REPORT),
+	ConfigSetting("HardwareTransformDebug", SETTING(g_Config, bHardwareTransform), true, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("TextureFiltering", SETTING(g_Config, iTexFiltering), 1, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("Smart2DTexFiltering", SETTING(g_Config, bSmart2DTexFiltering), false, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("InternalResolution", SETTING(g_Config, iInternalResolution), &DefaultInternalResolution, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("AndroidHwScale", SETTING(g_Config, iAndroidHwScale), 0, CfgFlag::DEFAULT),
 	ConfigSetting("HighQualityDepth", SETTING(g_Config, bHighQualityDepth), true, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("FrameSkip", SETTING(g_Config, iFrameSkip), 0, CfgFlag::PER_GAME | CfgFlag::REPORT),
-	ConfigSetting("AutoFrameSkip", SETTING(g_Config, bAutoFrameSkip), IsVREnabled(), CfgFlag::PER_GAME | CfgFlag::REPORT),
+	ConfigSetting("AutoFrameSkip", SETTING(g_Config, bAutoFrameSkip), false, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("StereoRendering", SETTING(g_Config, bStereoRendering), false, CfgFlag::PER_GAME),
 	ConfigSetting("StereoToMonoShader", SETTING(g_Config, sStereoToMonoShader), "RedBlue", CfgFlag::PER_GAME),
-	ConfigSetting("FrameRate", SETTING(g_Config, iFpsLimit1), 0, CfgFlag::PER_GAME),
-	ConfigSetting("FrameRate2", SETTING(g_Config, iFpsLimit2), -1, CfgFlag::PER_GAME),
-	ConfigSetting("AnalogFrameRate", SETTING(g_Config, iAnalogFpsLimit), 240, CfgFlag::PER_GAME),
+	// Read before the new settings, which use them as defaults.
+	ConfigSetting("FrameRate", SETTING(g_Config, iLegacyFpsLimit1), 0, CfgFlag::PER_GAME | CfgFlag::DONT_SAVE),
+	ConfigSetting("FrameRate2", SETTING(g_Config, iLegacyFpsLimit2), -1, CfgFlag::PER_GAME | CfgFlag::DONT_SAVE),
+	ConfigSetting("AnalogFrameRate", SETTING(g_Config, iLegacyAnalogFpsLimit), 240, CfgFlag::PER_GAME | CfgFlag::DONT_SAVE),
+	ConfigSetting("AltSpeedPercent", SETTING(g_Config, iAltSpeedPercent1), &DefaultAltSpeedPercent1, CfgFlag::PER_GAME),
+	ConfigSetting("AltSpeedPercent2", SETTING(g_Config, iAltSpeedPercent2), &DefaultAltSpeedPercent2, CfgFlag::PER_GAME),
+	ConfigSetting("AnalogAltSpeedPercent", SETTING(g_Config, iAnalogAltSpeedPercent), &DefaultAnalogAltSpeedPercent, CfgFlag::PER_GAME),
 #if PPSSPP_PLATFORM(WINDOWS)
 	ConfigSetting("RestartRequired", SETTING(g_Config, bRestartRequired), false, CfgFlag::DONT_SAVE),
 #endif
@@ -749,8 +820,6 @@ static const ConfigSetting graphicsSettings[] = {
 	ConfigSetting("LowLatencyPresent", SETTING(g_Config, bLowLatencyPresent), false, CfgFlag::PER_GAME),
 	ConfigSetting("BloomHack", SETTING(g_Config, iBloomHack), 0, CfgFlag::PER_GAME | CfgFlag::REPORT),
 
-	// Not really a graphics setting...
-	ConfigSetting("SplineBezierQuality", SETTING(g_Config, iSplineBezierQuality), 2, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("TextureShader", SETTING(g_Config, sTextureShaderName), "Off", CfgFlag::PER_GAME),
 	ConfigSetting("ShaderChainRequires60FPS", SETTING(g_Config, bShaderChainRequires60FPS), false, CfgFlag::PER_GAME),
 
@@ -769,7 +838,7 @@ static const ConfigSetting graphicsSettings[] = {
 
 	ConfigSetting("UberShaderVertex", SETTING(g_Config, bUberShaderVertex), true, CfgFlag::DEFAULT),
 
-	ConfigSetting("DisplayRefreshRate", SETTING(g_Config, iDisplayRefreshRate), g_Config.iDisplayRefreshRate, CfgFlag::PER_GAME),
+	ConfigSetting("DisplayRefreshRate", SETTING(g_Config, iDisplayRefreshRate), 60, CfgFlag::PER_GAME),
 };
 
 static int LegacyVolumeToNewVolume(int legacy, int max) {
@@ -810,7 +879,7 @@ bool DefaultAudioMixWithOthers() {
 #endif
 }
 
-static const ConfigSetting soundSettings[] = {
+static constexpr ConfigSetting soundSettings[] = {
 	ConfigSetting("Enable", SETTING(g_Config, bEnableSound), true, CfgFlag::PER_GAME),
 	ConfigSetting("ExtraAudioBuffering", SETTING(g_Config, bExtraAudioBuffering), false, CfgFlag::DEFAULT),
 	ConfigSetting("AudioBufferSize", SETTING(g_Config, iSDLAudioBufferSize), 256, CfgFlag::DEFAULT),
@@ -834,6 +903,7 @@ static const ConfigSetting soundSettings[] = {
 	ConfigSetting("GamePreviewVolume", SETTING(g_Config, iGamePreviewVolume), &DefaultGamePreviewVolume, CfgFlag::DEFAULT),
 
 	ConfigSetting("AudioDevice", SETTING(g_Config, sAudioDevice), "", CfgFlag::DEFAULT),
+	ConfigSetting("MicDevice", SETTING(g_Config, sMicDevice), "", CfgFlag::DEFAULT),
 	ConfigSetting("AutoAudioDevice", SETTING(g_Config, bAutoSwitchAudioDevice), true, CfgFlag::DEFAULT),
 	ConfigSetting("AudioMixWithOthers", SETTING(g_Config, bAudioMixWithOthers), &DefaultAudioMixWithOthers, CfgFlag::DEFAULT),
 	ConfigSetting("AudioRespectSilentMode", SETTING(g_Config, bAudioRespectSilentMode), false, CfgFlag::DEFAULT),
@@ -849,9 +919,9 @@ static bool DefaultShowTouchControls() {
 	}
 }
 
-static const float defaultControlScale = 1.15f;
-static const ConfigTouchPos defaultTouchPosShow = { -1.0f, -1.0f, defaultControlScale, true };
-static const ConfigTouchPos defaultTouchPosHide = { -1.0f, -1.0f, defaultControlScale, false };
+static constexpr float defaultControlScale = 1.15f;
+static constexpr ConfigTouchPos defaultTouchPosShow = { -1.0f, -1.0f, defaultControlScale, true };
+static constexpr ConfigTouchPos defaultTouchPosHide = { -1.0f, -1.0f, defaultControlScale, false };
 
 void TouchControlConfig::ResetLayout() {
 	// reset puts the settings in a state so they'll then get properly reinitialized in InitPadLayout.
@@ -899,7 +969,7 @@ bool TouchControlConfig::ResetToDefault(std::string_view blockName) {
 	return true;
 }
 
-static const ConfigSetting touchControlSettings[] = {
+static constexpr ConfigSetting touchControlSettings[] = {
 	ConfigSetting("ShowTouchCross", SETTING(g_Config.touchControlsLandscape, bShowTouchCross), true, CfgFlag::PER_GAME),
 	ConfigSetting("ShowTouchCircle", SETTING(g_Config.touchControlsLandscape, bShowTouchCircle), true, CfgFlag::PER_GAME),
 	ConfigSetting("ShowTouchSquare", SETTING(g_Config.touchControlsLandscape, bShowTouchSquare), true, CfgFlag::PER_GAME),
@@ -948,7 +1018,7 @@ static const ConfigSetting touchControlSettings[] = {
 	ConfigSetting("HideStickBackground", SETTING(g_Config.touchControlsLandscape, bHideStickBackground), CfgFlag::PER_GAME),
 };
 
-static const ConfigSetting controlSettings[] = {
+static constexpr ConfigSetting controlSettings[] = {
 	ConfigSetting("HapticFeedback", SETTING(g_Config, bHapticFeedback), false, CfgFlag::PER_GAME),
 	
 #if PPSSPP_PLATFORM(WINDOWS)
@@ -989,6 +1059,7 @@ static const ConfigSetting controlSettings[] = {
 	ConfigSetting("TiltCircularDeadzone", SETTING(g_Config, bTiltCircularDeadzone), true, CfgFlag::PER_GAME),
 	ConfigSetting("TiltInputType", SETTING(g_Config, iTiltInputType), 1, CfgFlag::PER_GAME),
 	ConfigSetting("TiltInputEnabled", SETTING(g_Config, bTiltInputEnabled), false, CfgFlag::PER_GAME),
+	ConfigSetting("TiltUseGyro", SETTING(g_Config, bTiltUseGyro), true, CfgFlag::PER_GAME),
 
 	ConfigSetting("DisableDpadDiagonals", SETTING(g_Config, bDisableDpadDiagonals), false, CfgFlag::PER_GAME),
 	ConfigSetting("GamepadOnlyFocused", SETTING(g_Config, bGamepadOnlyFocused), false, CfgFlag::PER_GAME),
@@ -1038,11 +1109,13 @@ static const ConfigSetting controlSettings[] = {
 
 static const std::vector<std::string_view> emptyList;
 
-static const ConfigSetting networkSettings[] = {
+static constexpr ConfigSetting networkSettings[] = {
 	ConfigSetting("EnableWlan", SETTING(g_Config, bEnableWlan), false, CfgFlag::PER_GAME),
 	ConfigSetting("EnableAdhocServer", SETTING(g_Config, bEnableAdhocServer), false, CfgFlag::PER_GAME),
 	ConfigSetting("proAdhocServer", SETTING(g_Config, sProAdhocServer), &DefaultProAdhocServer, CfgFlag::PER_GAME),
 	ConfigSetting("AdhocServerRelayMode", SETTING(g_Config, iAdhocServerRelayMode), (int)AdhocServerRelayMode::Auto, CfgFlag::PER_GAME),
+	ConfigSetting("AdhocUseUdp", SETTING(g_Config, bAdhocUseUdp), false, CfgFlag::PER_GAME),
+	ConfigSetting("AdhocRelayModeEnetPdpReliable", SETTING(g_Config, bAdhocRelayModeEnetPdpReliable), true, CfgFlag::PER_GAME),
 	ConfigSetting("AdhocServerShowPlayerPorts", SETTING(g_Config, bAdhocServerShowPlayerPorts), false, CfgFlag::PER_GAME),
 	ConfigSetting("PortOffset", SETTING(g_Config, iPortOffset), 10000, CfgFlag::PER_GAME),
 	ConfigSetting("PrimaryDNSServer", SETTING(g_Config, sInfrastructureDNSServer), "67.222.156.250", CfgFlag::PER_GAME),
@@ -1063,14 +1136,14 @@ static const ConfigSetting networkSettings[] = {
 	ConfigSetting("ChatScreenPosition", SETTING(g_Config, iChatScreenPosition), (int)ScreenEdgePosition::BOTTOM_LEFT, CfgFlag::PER_GAME),
 	ConfigSetting("ChatTimestamps", SETTING(g_Config, bChatTimestamps), true, CfgFlag::PER_GAME),
 	ConfigSetting("EnableQuickChat", SETTING(g_Config, bEnableQuickChat), true, CfgFlag::PER_GAME),
-	ConfigSetting("QuickChat1", SETTING(g_Config, sQuickChat[0]), "Quick Chat 1", CfgFlag::PER_GAME),
-	ConfigSetting("QuickChat2", SETTING(g_Config, sQuickChat[1]), "Quick Chat 2", CfgFlag::PER_GAME),
-	ConfigSetting("QuickChat3", SETTING(g_Config, sQuickChat[2]), "Quick Chat 3", CfgFlag::PER_GAME),
-	ConfigSetting("QuickChat4", SETTING(g_Config, sQuickChat[3]), "Quick Chat 4", CfgFlag::PER_GAME),
-	ConfigSetting("QuickChat5", SETTING(g_Config, sQuickChat[4]), "Quick Chat 5", CfgFlag::PER_GAME),
+	ConfigSetting("QuickChat1", SETTING_IDX(g_Config, sQuickChat, 0), "Quick Chat 1", CfgFlag::PER_GAME),
+	ConfigSetting("QuickChat2", SETTING_IDX(g_Config, sQuickChat, 1), "Quick Chat 2", CfgFlag::PER_GAME),
+	ConfigSetting("QuickChat3", SETTING_IDX(g_Config, sQuickChat, 2), "Quick Chat 3", CfgFlag::PER_GAME),
+	ConfigSetting("QuickChat4", SETTING_IDX(g_Config, sQuickChat, 3), "Quick Chat 4", CfgFlag::PER_GAME),
+	ConfigSetting("QuickChat5", SETTING_IDX(g_Config, sQuickChat, 4), "Quick Chat 5", CfgFlag::PER_GAME),
 };
 
-static const ConfigSetting systemParamSettings[] = {
+static constexpr ConfigSetting systemParamSettings[] = {
 	ConfigSetting("PSPModel", SETTING(g_Config, iPSPModel), PSP_MODEL_SLIM, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("PSPFirmwareVersion", SETTING(g_Config, iFirmwareVersion), PSP_DEFAULT_FIRMWARE, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("NickName", SETTING(g_Config, sNickName), "PPSSPP", CfgFlag::PER_GAME),
@@ -1086,10 +1159,12 @@ static const ConfigSetting systemParamSettings[] = {
 	ConfigSetting("BypassOSKWithKeyboard", SETTING(g_Config, bBypassOSKWithKeyboard), false, CfgFlag::PER_GAME),
 	ConfigSetting("WlanPowerSave", SETTING(g_Config, bWlanPowerSave), (bool) PSP_SYSTEMPARAM_WLAN_POWERSAVE_OFF, CfgFlag::PER_GAME),
 	ConfigSetting("EncryptSave", SETTING(g_Config, bEncryptSave), true, CfgFlag::PER_GAME | CfgFlag::REPORT),
+	ConfigSetting("VshUmdAutoboot", SETTING(g_Config, bVshUmdAutoboot), false, CfgFlag::DEFAULT),
 	ConfigSetting("MemStickSize", SETTING(g_Config, iMemStickSizeGB), 16, CfgFlag::DEFAULT),
+	ConfigSetting("FuseID", SETTING(g_Config, sFuseID), "", CfgFlag::DEFAULT),
 };
 
-static const ConfigSetting debuggerSettings[] = {
+static constexpr ConfigSetting debuggerSettings[] = {
 	ConfigSetting("DisasmWindowX", SETTING(g_Config, iDisasmWindowX), -1, CfgFlag::DEFAULT),
 	ConfigSetting("DisasmWindowY", SETTING(g_Config, iDisasmWindowY), -1, CfgFlag::DEFAULT),
 	ConfigSetting("DisasmWindowW", SETTING(g_Config, iDisasmWindowW), -1, CfgFlag::DEFAULT),
@@ -1114,21 +1189,21 @@ static const ConfigSetting debuggerSettings[] = {
 	ConfigSetting("AutoSaveLoadSymbols", SETTING(g_Config, bAutoSaveLoadSymbols), false, CfgFlag::DEFAULT),
 };
 
-static const ConfigSetting jitSettings[] = {
+static constexpr ConfigSetting jitSettings[] = {
 	ConfigSetting("DiscardRegsOnJRRA", SETTING(g_Config, bDiscardRegsOnJRRA), false, CfgFlag::DONT_SAVE | CfgFlag::REPORT),
 };
 
-static const ConfigSetting upgradeSettings[] = {
+static constexpr ConfigSetting upgradeSettings[] = {
 	ConfigSetting("UpgradeMessage", SETTING(g_Config, sUpgradeMessage), "", CfgFlag::DEFAULT),
 	ConfigSetting("UpgradeVersion", SETTING(g_Config, sUpgradeVersion), "", CfgFlag::DEFAULT),
 	ConfigSetting("DismissedVersion", SETTING(g_Config, sDismissedVersion), "", CfgFlag::DEFAULT),
 };
 
-static const ConfigSetting themeSettings[] = {
+static constexpr ConfigSetting themeSettings[] = {
 	ConfigSetting("ThemeName", SETTING(g_Config, sThemeName), "Default", CfgFlag::DEFAULT),
 };
 
-static const ConfigSetting vrSettings[] = {
+static constexpr ConfigSetting vrSettings[] = {
 	ConfigSetting("VREnable", SETTING(g_Config, bEnableVR), true, CfgFlag::PER_GAME),
 	ConfigSetting("VREnable6DoF", SETTING(g_Config, bEnable6DoF), false, CfgFlag::PER_GAME),
 	ConfigSetting("VREnableStereo", SETTING(g_Config, bEnableStereo), false, CfgFlag::PER_GAME),
@@ -1242,7 +1317,7 @@ void Config::UpdateIniLocation(const char *iniFileName, const char *controllerIn
 	controllerIniFilename_ = FindConfigFile(searchPath_, useControllerIniFilename ? controllerIniFilename : controlsIniFilename, &exists);
 }
 
-bool Config::LoadAppendedConfig() {
+bool Config::LoadAppendedConfig(bool save) {
 	IniFile iniFile;
 	if (!iniFile.Load(appendedConfigFileName_)) {
 		ERROR_LOG(Log::Config, "Failed to read appended config '%s'.", appendedConfigFileName_.c_str());
@@ -1261,7 +1336,9 @@ bool Config::LoadAppendedConfig() {
 
 	INFO_LOG(Log::Config, "Loaded appended config '%s'.", appendedConfigFileName_.c_str());
 
-	Save("Loaded appended config"); // Let's prevent reset
+	if (save) {
+		Save("Loaded appended config"); // Let's prevent reset
+	}
 	return true;
 }
 
@@ -1320,7 +1397,8 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 	bSaveSettings = true;
 
 	IniFile iniFile;
-	if (!iniFile.Load(iniFilename_)) {
+	loadedFromFile_ = iniFile.Load(iniFilename_);
+	if (!loadedFromFile_) {
 		WARN_LOG(Log::Config, "Failed to read '%s'. Setting main config to default.", iniFilename_.c_str());
 		// Continue anyway to initialize the config.
 	}
@@ -1369,6 +1447,18 @@ void Config::Load(const char *iniFileName, const char *controllerIniFilename) {
 		const std::string &path = value;
 		if (startsWith(path, "http://") || startsWith(path, "https://") || File::Exists(Path(path))) {
 			vPinnedPaths.push_back(File::ResolvePath(path));
+		}
+	}
+
+	vShortcutUris.clear();
+	if (const Section *shortcuts = iniFile.GetSection("Shortcuts")) {
+		for (int i = 0; i < MAX_SHORTCUT_URIS; i++) {
+			char keyName[64];
+			snprintf(keyName, sizeof(keyName), "Uri%d", i);
+			std::string uri;
+			if (shortcuts->Get(keyName, &uri) && !uri.empty()) {
+				vShortcutUris.push_back(uri);
+			}
 		}
 	}
 
@@ -1496,6 +1586,18 @@ bool Config::Save(const char *saveReason) {
 			pinnedPaths->Set(keyName, vPinnedPaths[i]);
 		}
 
+		if (vShortcutUris.empty()) {
+			iniFile.DeleteSection("Shortcuts");
+		} else {
+			Section *shortcuts = iniFile.GetOrCreateSection("Shortcuts");
+			shortcuts->Clear();
+			for (size_t i = 0; i < vShortcutUris.size(); ++i) {
+				char keyName[64];
+				snprintf(keyName, sizeof(keyName), "Uri%d", (int)i);
+				shortcuts->Set(keyName, vShortcutUris[i]);
+			}
+		}
+
 		if (!IsGameSpecific()) {
 			// These settings can be game specific, and so are handled in SaveGameConfig().
 
@@ -1560,6 +1662,12 @@ bool Config::Save(const char *saveReason) {
 
 // A lot more cleanup tasks should be moved into here, and some of these are severely outdated.
 void Config::PostLoadCleanup() {
+	// JIT_IR is the same core as JIT now that every native JIT is IR-based, and the settings no
+	// longer offer it.
+	if (iCpuCore == (int)CPUCore::JIT_IR) {
+		iCpuCore = (int)CPUCore::JIT;
+	}
+
 	// Override ppsspp.ini JIT value to prevent crashing
 	jitForcedOff = DefaultCpuCore() != (int)CPUCore::JIT && (g_Config.iCpuCore == (int)CPUCore::JIT || g_Config.iCpuCore == (int)CPUCore::JIT_IR);
 	if (jitForcedOff) {
@@ -1571,7 +1679,7 @@ void Config::PostLoadCleanup() {
 
 	if (iGPUBackend == 1) {  // d3d9, no longer supported. Fall back to D3D11.
 		iGPUBackend = (int)GPUBackend::DIRECT3D11;
-	} else if (iGPUBackend < 0 || iGPUBackend > 3) {
+	} else if (iGPUBackend < 0 || iGPUBackend > (int)GPUBackend::METAL) {
 		iGPUBackend = (int)DefaultGPUBackend();
 	}
 
@@ -1619,6 +1727,9 @@ void Config::PostLoadCleanup() {
 
 	// Three frames in flight showed no benefit over two, so the option is gone. Squash old values.
 	iInflightFrames = std::clamp(iInflightFrames, 1, 2);
+
+	// The touch layout editor divides by this, and loops forever drawing the grid if it's 0.
+	iTouchSnapGridSize = std::clamp(iTouchSnapGridSize, 2, 256);
 }
 
 void Config::PreSaveCleanup() {
@@ -1753,6 +1864,19 @@ void Config::DismissUpgrade() {
 	INFO_LOG(Log::Config, "Upgrade dismissed for version %s", sUpgradeVersion.c_str());
 	sDismissedVersion = sUpgradeVersion;
 	sUpgradeMessage.clear();
+}
+
+bool Config::AddShortcutUri(std::string_view uri) {
+	auto iter = std::find(vShortcutUris.begin(), vShortcutUris.end(), uri);
+	const bool added = iter == vShortcutUris.end();
+	if (!added) {
+		vShortcutUris.erase(iter);
+	}
+	vShortcutUris.insert(vShortcutUris.begin(), std::string(uri));
+	if ((int)vShortcutUris.size() > MAX_SHORTCUT_URIS) {
+		vShortcutUris.resize(MAX_SHORTCUT_URIS);
+	}
+	return added;
 }
 
 void Config::SetSearchPath(const Path &searchPath) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -248,6 +249,11 @@ public:
 	void ThreadStart(Draw::DrawContext *draw);
 	void ThreadEnd();
 	bool ThreadFrame();  // False means it's time to exit.
+	// True if ThreadFrame() has queued work and will not block on an empty queue.
+	bool HasQueuedThreadWork() {
+		std::lock_guard<std::mutex> lock(pushMutex_);
+		return !renderThreadQueue_.empty();
+	}
 
 	void NotifyEmuThreadExit();
 
@@ -837,6 +843,10 @@ public:
 		queueRunner_.Resize(width, height);
 	}
 
+	void ForgetBoundFramebuffers() {
+		queueRunner_.ForgetBoundFramebuffers();
+	}
+
 	void UnregisterPushBuffer(GLPushBuffer *buffer) {
 		std::lock_guard<std::mutex> lock(pushBuffersMutex_);
 		int foundCount = 0;
@@ -930,7 +940,8 @@ private:
 	bool syncDone_ = false;
 
 	GLDeleter deleter_;
-	bool skipGLCalls_ = false;
+	// Set from either thread, read on the render thread.
+	std::atomic<bool> skipGLCalls_{false};
 
 	int curFrame_ = 0;
 
