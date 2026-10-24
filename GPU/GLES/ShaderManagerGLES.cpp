@@ -720,10 +720,9 @@ LinkedShader *ShaderManagerGLES::ApplyFragmentShader(VShaderID VSID, Shader *vs,
 		lastShader_ = nullptr;
 		gstate_c.Clean(DIRTY_FRAGMENTSHADER_STATE);
 		ComputeFragmentShaderID(&FSID, pipelineState, draw_->GetBugs(), clipInfoFlags);
-		// Only explicitly identified replacement atlases enable the legacy PBR shader path.
-		if (legacyPBRAtlas) {
-			FSID.SetBit(FS_BIT_LEGACY_PBR_ATLAS);
-		}
+		// Bit 61 is shared with Vulkan's array-texture flag. GLES never uses framebuffer array
+		// textures, so explicitly clear it here unless this draw uses a recognized legacy PBR atlas.
+		FSID.SetBit(FS_BIT_LEGACY_PBR_ATLAS, legacyPBRAtlas);
 		// Legacy PBR alpha is an OpenGL/GLES-only shader variant.
 		if (gstate_c.Use(GPU_USE_FRAGMENT_TEST_CACHE) && gstate.isTextureMapEnabled() && gstate.isFogEnabled() && gstate.isTextureAlphaUsed()) {
 			FSID.SetBit(FS_BIT_LEGACY_PBR_ALPHA);
