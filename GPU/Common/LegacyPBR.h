@@ -23,8 +23,8 @@ inline bool LegacyPBRVertexMode2(bool useHWTransform, bool hasTexcoord, bool ver
 	return useHWTransform && hasTexcoord && vertexRangeCulling;
 }
 
-inline bool LegacyPBRFragmentBase(bool enableFragmentTestCache, bool doTexture, bool enableFog) {
-	return enableFragmentTestCache && doTexture && enableFog;
+inline bool LegacyPBRFragmentBase(bool doTexture, bool enableFog) {
+	return doTexture && enableFog;
 }
 
 inline void WriteLegacyPBRVaryingVS(ShaderWriter &p, const char *varying) {
