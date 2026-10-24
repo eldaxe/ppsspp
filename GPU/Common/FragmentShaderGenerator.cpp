@@ -70,7 +70,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 	}
 
 	bool texture3D = id.Bit(FS_BIT_3D_TEXTURE);
-		bool arrayTexture = id.Bit(FS_BIT_SAMPLE_ARRAY_TEXTURE);
+		bool arrayTexture = compat.shaderLanguage == GLSL_VULKAN && id.Bit(FS_BIT_SAMPLE_ARRAY_TEXTURE);
 
 	bool linkedLegacyPBRVertexMode1 = false;
 	bool linkedLegacyPBRVertexMode2 = false;
@@ -147,7 +147,7 @@ bool GenerateFragmentShader(const FShaderID &id, const VShaderID *linkedVSID, ch
 	const bool legacyPBRFragmentBase =
 		id.Bit(FS_BIT_LEGACY_PBR_ATLAS) &&
 		(linkedLegacyPBRVertexMode1 || linkedLegacyPBRVertexMode2) &&
-		LegacyPBRFragmentBase(enableFragmentTestCache, doTexture, enableFog);
+		LegacyPBRFragmentBase(doTexture, enableFog);
 	bool enableAlphaTest = id.Bit(FS_BIT_ALPHA_TEST);
 
 	bool alphaTestAgainstZero = id.Bit(FS_BIT_ALPHA_AGAINST_ZERO);
